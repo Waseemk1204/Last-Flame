@@ -44,5 +44,6 @@ for (const [i, L] of LEVELS.entries()) {
     assert.ok(r.won);
     assert.ok(r.used.cp, "passes the checkpoint");
     assert.ok(r.minLife >= 2, "leaves a human some slack");
+    assert.ok(r.time < L.par[0], "gold is possible");
   });
 }

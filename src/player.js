@@ -126,6 +126,26 @@ export class Player {
     this.light.castShadow = false;
     this.root.add(this.light);
 
+    // Your shadow: a dark spot on whatever is below you, so you can see
+    // where you'll land.
+    const sc = document.createElement("canvas");
+    sc.width = sc.height = 64;
+    const sx = sc.getContext("2d");
+    const sg = sx.createRadialGradient(32, 32, 0, 32, 32, 32);
+    sg.addColorStop(0, "rgba(0,0,0,0.85)");
+    sg.addColorStop(0.6, "rgba(0,0,0,0.45)");
+    sg.addColorStop(1, "rgba(0,0,0,0)");
+    sx.fillStyle = sg;
+    sx.fillRect(0, 0, 64, 64);
+    this.shadow = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(sc), transparent: true, depthWrite: false }));
+    this.shadow.rotation.x = -Math.PI / 2;
+    this.shadow.renderOrder = 2;
+    scene.add(this.shadow);
+    // A ring on it while you're in the air.
+    this.ring = new THREE.Mesh(new THREE.RingGeometry(0.34, 0.4, 32), new THREE.MeshBasicMaterial({ color: new THREE.Color(1.6, 0.8, 0.3), transparent: true, depthWrite: false, fog: false }));
+    this.ring.rotation.x = -Math.PI / 2;
+    scene.add(this.ring);
+
     // Embers that rise off you.
     this.sparks = new Sparks(scene, 160);
 
@@ -140,8 +160,20 @@ export class Player {
   }
 
   // b: the physics body. life01: how much of a full flame you are.
-  update(dt, t, b, life01, { dashing = false } = {}) {
+  update(dt, t, b, life01, { dashing = false, ground = null } = {}) {
     const r = this.root;
+    // Shadow and landing ring.
+    const sh = this.shadow;
+    sh.visible = ground !== null && this.alive > 0.1;
+    this.ring.visible = sh.visible && !b.grounded;
+    if (sh.visible) {
+      const h = Math.max(0, b.y - ground);
+      sh.position.set(b.x, ground + 0.015, b.z);
+      sh.scale.setScalar(0.75 + h * 0.06);
+      sh.material.opacity = Math.max(0.25, 0.9 - h * 0.08) * this.alive;
+      this.ring.position.set(b.x, ground + 0.02, b.z);
+      this.ring.material.opacity = Math.min(0.8, h * 0.5);
+    }
     r.position.set(b.x, b.y, b.z);
     const sp = Math.hypot(b.vx, b.vz);
     if (sp > 0.3 || dashing) {
@@ -219,6 +251,24 @@ export class Player {
   kick(v) {
     this.squash = v;
     this.squashV = 0;
+  }
+
+  // A puff of embers along the ground when you land hard.
+  dust(power) {
+    const p = this.root.position;
+    for (let i = 0; i < 16; i += 1) {
+      const a = (i / 16) * Math.PI * 2;
+      this.sparks.emit(p.x + Math.cos(a) * 0.2, p.y + 0.05, p.z + Math.sin(a) * 0.2, Math.cos(a) * power, 0.3, Math.sin(a) * power);
+    }
+  }
+
+  // Sparks that stream from a lamp into you.
+  streak(from) {
+    const p = this.root.position;
+    for (let i = 0; i < 18; i += 1) {
+      const k = i / 18;
+      this.sparks.emit(from.x + (p.x - from.x) * k, from.y + (p.y + 0.5 - from.y) * k + Math.sin(k * Math.PI) * 0.4, from.z + (p.z - from.z) * k, (Math.random() - 0.5) * 0.6, 0.6 + Math.random(), (Math.random() - 0.5) * 0.6);
+    }
   }
 
   burst(n = 30, power = 3) {

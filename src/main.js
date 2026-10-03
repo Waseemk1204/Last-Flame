@@ -4,13 +4,13 @@
 import * as THREE from "three";
 import { Game } from "./game.js";
 import { Sound } from "./audio.js";
-import { LEVELS } from "../shared/levels.js";
+import { LEVELS, medal } from "../shared/levels.js";
 
 const $ = (s) => document.querySelector(s);
 
 // ---------------------------------------------------------------- settings
 const KEY = "lastflame.settings";
-const settings = { sens: 0.0024, vol: 0.9, quality: "high", invert: false };
+const settings = { sens: 0.0024, vol: 0.9, quality: "high", invert: false, ghost: true };
 try {
   Object.assign(settings, JSON.parse(localStorage.getItem(KEY) || "{}"));
 } catch {}
@@ -148,6 +148,7 @@ let running = false;
 function applySettings() {
   sound.setVolume(settings.vol);
   game.setQuality(settings.quality);
+  game.showGhost = settings.ghost;
 }
 applySettings();
 
@@ -183,6 +184,8 @@ let levelsBack = "#title";
 
 function refreshTitle() {
   const p = Game.progress();
+  game.showcase(Math.min(p.unlocked, LEVELS.length - 1));
+  ui.hideHud();
   const c = $("#btn-continue");
   c.classList.toggle("hidden", !p.resume);
   if (p.resume) c.textContent = `Continue · ${LEVELS[p.resume.level].name}${p.resume.cp ? " (checkpoint)" : ""}`;
@@ -216,7 +219,10 @@ function openLevels(back) {
     b.className = `level-card${open ? "" : " locked"}${L.final ? " final" : ""}`;
     b.type = "button";
     b.disabled = !open;
-    b.innerHTML = `<span class="n">${i + 1}</span><span class="name">${open ? L.name : "· · ·"}</span><span class="best">${p.best[i] !== undefined ? `best ${fmt(p.best[i])}` : ""}</span>`;
+    const best = p.best[i];
+    const m = best !== undefined ? medal(L, best) : null;
+    const lamps = p.lamps?.[i] !== undefined ? `<span class="lamps">${p.lamps[i]} / ${p.lampsTotal[i]} lamps</span>` : "";
+    b.innerHTML = `<span class="n">${i + 1}</span><span class="name">${open ? L.name : "· · ·"}</span><span class="best">${m ? `<i class="medal ${m}"></i>${fmt(best)}` : ""}</span>${lamps}`;
     if (open)
       b.addEventListener("click", () => {
         sound.begin();
@@ -272,8 +278,6 @@ $("#btn-restart-cp").addEventListener("click", () => {
 $("#btn-restart").addEventListener("click", () => begin(game.index));
 $("#btn-pause-levels").addEventListener("click", () => openLevels("#pause"));
 $("#btn-quit").addEventListener("click", () => {
-  game.state = "idle";
-  ui.hideHud();
   refreshTitle();
   show("#title");
 });
@@ -285,6 +289,7 @@ function openSettings(back) {
   $("#set-vol").value = settings.vol;
   $("#set-quality").value = settings.quality;
   $("#set-invert").checked = settings.invert;
+  $("#set-ghost").checked = settings.ghost;
   show("#settings");
 }
 for (const [id, key, kind] of [
@@ -292,6 +297,7 @@ for (const [id, key, kind] of [
   ["#set-vol", "vol", "num"],
   ["#set-quality", "quality", "str"],
   ["#set-invert", "invert", "bool"],
+  ["#set-ghost", "ghost", "bool"],
 ]) {
   $(id).addEventListener("input", (e) => {
     settings[key] = kind === "num" ? Number(e.target.value) : kind === "bool" ? e.target.checked : e.target.value;
@@ -308,7 +314,9 @@ game.onWin = (s) => {
   ui.hideHud();
   $("#win-n").textContent = `Level ${s.index + 1} of ${LEVELS.length}`;
   $("#win-name").textContent = s.name;
-  $("#win-stats").textContent = `${fmt(s.time)} · went out ${s.deaths} time${s.deaths === 1 ? "" : "s"}`;
+  $("#win-medal").innerHTML = `<i class="medal ${s.medal}"></i>${s.medal}`;
+  $("#win-stats").textContent = `${fmt(s.time)} · ${s.lamps} / ${s.lampsTotal} lamps · went out ${s.deaths} time${s.deaths === 1 ? "" : "s"}`;
+  $("#win-par").textContent = s.medal === "gold" ? `Gold is under ${fmt(s.par[0])}` : `Gold under ${fmt(s.par[0])} · silver under ${fmt(s.par[1])}`;
   $("#win-best").textContent = game.newBest ? "New best time" : `Best ${fmt(Game.progress().best[s.index])}`;
   show("#win");
 };
@@ -327,7 +335,6 @@ game.onFinale = ({ time, deaths }) => {
   show("#final");
 };
 $("#btn-final-title").addEventListener("click", () => {
-  game.state = "idle";
   refreshTitle();
   show("#title");
 });
@@ -367,7 +374,7 @@ function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
   if (!$("#title").classList.contains("hidden")) drawTitleFlame(now);
-  if (running || game.state === "won" || game.state === "ending") {
+  if (running || game.state === "won" || game.state === "ending" || game.state === "showcase") {
     try {
       game.update(dt);
     } catch (err) {

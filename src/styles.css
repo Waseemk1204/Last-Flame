@@ -54,7 +54,7 @@ kbd { font: 600 10px var(--sans); border: 1px solid rgba(243, 231, 208, 0.4); bo
 
 /* Screens */
 .screen { position: absolute; inset: 0; display: grid; place-items: center; padding: 16px; overflow-y: auto; }
-.title { background: radial-gradient(ellipse at 50% 70%, #2a1606 0%, #05060c 62%); }
+.title { background: radial-gradient(ellipse at 50% 50%, rgba(5, 6, 12, 0.25) 0%, rgba(5, 6, 12, 0.55) 45%, rgba(5, 6, 12, 0.92) 100%); }
 .title-body { text-align: center; }
 #title-flame { width: 80px; height: 120px; display: block; margin: 0 auto 4px; }
 .title h1 { margin: 0; font-family: var(--serif); font-weight: 400; font-size: clamp(48px, 9vw, 104px); letter-spacing: 0.32em; margin-left: 0.32em; color: #f6e4c2; text-shadow: 0 0 40px rgba(255, 140, 40, 0.35); }
@@ -91,6 +91,13 @@ kbd { font: 600 10px var(--sans); border: 1px solid rgba(243, 231, 208, 0.4); bo
 .win { background: radial-gradient(ellipse at 50% 60%, rgba(40, 20, 6, 0.8), rgba(5, 6, 12, 0.92)); }
 .win-n { font-size: 12px; letter-spacing: 0.4em; color: var(--dim); text-transform: uppercase; margin: 0; }
 .win h2, .final-h { margin: 8px 0 20px !important; }
+.medal-big { margin: 0 0 10px; font-size: 12px; letter-spacing: 0.4em; text-transform: uppercase; }
+.medal { display: inline-block; width: 12px; height: 12px; border-radius: 50%; vertical-align: -1px; margin-right: 6px; }
+.medal.gold { background: radial-gradient(circle at 35% 35%, #fff2b0, #e0a820 60%, #8a5a08); box-shadow: 0 0 8px rgba(255, 200, 60, 0.7); }
+.medal.silver { background: radial-gradient(circle at 35% 35%, #ffffff, #b8c0cc 60%, #5a6270); }
+.medal.bronze { background: radial-gradient(circle at 35% 35%, #ffd0a0, #b8682a 60%, #5a2a08); }
+.win-par { font-size: 12px; color: var(--dim); letter-spacing: 0.08em; margin: 0 0 6px; }
+.level-card .lamps { display: block; font-size: 11px; color: var(--dim); margin-top: 2px; }
 .win-stats { font-size: 15px; letter-spacing: 0.08em; color: var(--ink); margin: 0 0 6px; }
 .win-best { font-size: 12px; letter-spacing: 0.25em; text-transform: uppercase; color: #ffd680; min-height: 18px; margin: 0 0 26px; }
 .final { background: radial-gradient(ellipse at 50% 60%, rgba(60, 20, 4, 0.75), rgba(5, 6, 12, 0.94)); }

@@ -386,4 +386,12 @@ export const LEVELS = [
   ),
 ];
 
+// Par times in seconds: [gold, silver]. Finishing at all is bronze.
+const PARS = [[20, 28], [23, 31], [28, 38], [21, 29], [26, 35], [18, 24], [20, 27], [32, 44], [28, 38]];
+LEVELS.forEach((L, i) => (L.par = PARS[i]));
+
+export function medal(L, time) {
+  return time <= L.par[0] ? "gold" : time <= L.par[1] ? "silver" : "bronze";
+}
+
 export const N = LEVELS.length;

@@ -61,6 +61,20 @@ squashes when it lands, and it shrinks and reddens as your life runs down.
 Difficulty: the bot's lowest life falls from about 11 s on level 1 to about
 3 s on levels 8 and 9, gaps widen, platforms shrink, and hazards stack.
 
+## Replay and feel
+
+- **Par times**: gold and silver per level (about 1.3× and 1.8× the bot's
+  time; the test checks gold stays possible). Medals and lamps burned show
+  on the results card and the level select.
+- **Ghost**: your best run of each level plays back as a pale blue flame.
+  (Settings can hide it.)
+- **Shadow and landing ring** under you, so you can judge jumps in 3D.
+- Camera shake on hard landings, drops and going out; the view widens when
+  you dash or fall fast; dust when you land; sparks stream into you from
+  each lamp you burn.
+- The title screen is the furthest level you've reached, idling behind the
+  menu.
+
 ## Ending
 
 You step into the Eternal Fire and become part of it. The camera pulls away

@@ -5,14 +5,16 @@
 import * as THREE from "three";
 import { Post } from "./post.js";
 import { World } from "./world.js";
-import { Player } from "./player.js";
-import { LEVELS } from "../shared/levels.js";
+import { Player, flameGeometry, flameMaterial, glowSprite } from "./player.js";
+import { LEVELS, medal } from "../shared/levels.js";
 import { Run } from "../shared/sim.js";
 import { Bot } from "../shared/bot.js";
 import { LIFE, PICKUPS } from "../shared/rules.js";
 
 const STEP = 1 / 120;
 const KEY = "lastflame.progress";
+const GHOST_KEY = "lastflame.ghost.";
+const GHOST_RATE = 30; // samples a second
 
 export class Game {
   constructor({ renderer, sound, ui, input }) {
@@ -34,6 +36,16 @@ export class Game {
     this.camPos = new THREE.Vector3();
     this.focus = new THREE.Vector3();
     this.camDist = 5.2;
+    this.trauma = 0;
+    this.showGhost = true;
+    // The ghost of your best run: a pale flame.
+    this.ghost = new THREE.Group();
+    const gm = new THREE.Mesh(flameGeometry(0.38, 20), flameMaterial({ core: [0.9, 1.3, 1.8], edge: [0.3, 0.5, 0.9], tip: [0.2, 0.3, 0.7], alpha: 0.45 }));
+    this.ghost.add(gm, glowSprite(0.9, [0.3, 0.45, 0.8]));
+    this.ghost.children[1].position.y = 0.45;
+    this.ghostMat = gm.material;
+    this.ghost.visible = false;
+    this.scene.add(this.ghost);
     this.onWin = () => {};
     this.onFinale = () => {};
     this.resize();
@@ -92,6 +104,13 @@ export class Game {
       this.run.respawn();
     }
     this.bot = auto ? new Bot(this.run) : null;
+    this.recording = fromCp || auto ? null : [];
+    this.nextSample = 0;
+    this.ghostRun = null;
+    try {
+      this.ghostRun = JSON.parse(localStorage.getItem(GHOST_KEY + index) || "null");
+    } catch {}
+    this.trauma = 0;
     if (this.bot) this.syncBot();
     this.sound.setLevel(index);
     this.state = "play";
@@ -124,6 +143,60 @@ export class Game {
     this.bot.planned = false;
   }
 
+  // The top of whatever is right under you (for your shadow).
+  groundBelow(b) {
+    let best = null;
+    for (const s of this.run.st.list) {
+      if (b.x < s.x0 || b.x > s.x1 || b.z < s.z0 || b.z > s.z1 || s.y1 > b.y + 0.05) continue;
+      if (best === null || s.y1 > best) best = s.y1;
+    }
+    return best;
+  }
+
+  // Your best run, replayed beside you as a pale flame.
+  updateGhost(t) {
+    const g = this.ghostRun;
+    const show = this.showGhost && g && (this.state === "play" || this.state === "dying") && !this.bot;
+    this.ghost.visible = !!show;
+    if (!show) return;
+    const f = this.run.time * GHOST_RATE;
+    const i = Math.floor(f);
+    const n = g.length / 3;
+    if (i >= n - 1) {
+      this.ghost.visible = false;
+      return;
+    }
+    const k = f - i;
+    const a = i * 3;
+    const x = g[a] + (g[a + 3] - g[a]) * k;
+    const y = g[a + 1] + (g[a + 4] - g[a + 1]) * k;
+    const z = g[a + 2] + (g[a + 5] - g[a + 2]) * k;
+    const dx = g[a + 3] - g[a];
+    const dz = g[a + 5] - g[a + 2];
+    this.ghost.position.set(x, y, z);
+    if (dx * dx + dz * dz > 1e-5) this.ghost.rotation.y = Math.atan2(dx, dz);
+    this.ghostMat.uniforms.uTime.value = t;
+    // Fade it out when it's right on top of you.
+    const d = Math.hypot(x - this.run.body.x, y - this.run.body.y, z - this.run.body.z);
+    this.ghostMat.uniforms.uAlpha.value = 0.45 * Math.min(1, d / 1.2);
+  }
+
+  // The title screen: a level idling behind the menu.
+  showcase(index) {
+    const L = LEVELS[index];
+    this.index = index;
+    this.L = L;
+    this.world.load(L, index);
+    this.run = new Run(L);
+    this.bot = null;
+    this.recording = null;
+    this.ghostRun = null;
+    this.player.alive = 1;
+    this.camera.fov = 62;
+    this.camera.updateProjectionMatrix();
+    this.state = "showcase";
+  }
+
   restartCheckpoint() {
     if (this.state !== "play") return;
     this.run.die([], "reset");
@@ -154,6 +227,11 @@ export class Game {
         }
         first = false;
         const ev = run.tick(inp, STEP);
+        if (this.recording && run.time >= this.nextSample) {
+          this.nextSample += 1 / GHOST_RATE;
+          const b = run.body;
+          this.recording.push(Math.round(b.x * 100) / 100, Math.round(b.y * 100) / 100, Math.round(b.z * 100) / 100);
+        }
         for (const e of ev) this.event(e);
         if (this.state !== "play") break;
       }
@@ -178,15 +256,26 @@ export class Game {
       }
     } else if (this.state === "ending") {
       this.updateEnding(dt);
+    } else if (this.state === "showcase") {
+      run.st.advance(dt, null);
+      run.body.grounded = true;
     }
     if (this.state === "play" && this.player.alive < 1) this.player.alive = Math.min(1, this.player.alive + dt * 3);
 
     // Look and sound.
     const b = run.body;
     const life01 = Math.max(0, run.life) / 10;
-    this.player.update(dt, t, b, this.state === "ending" ? 1 : life01, { dashing: b.dashT > 0 });
+    this.player.update(dt, t, b, this.state === "ending" || this.state === "showcase" ? 1 : life01, { dashing: b.dashT > 0, ground: this.groundBelow(b) });
+    this.updateGhost(t);
     this.world.sync(run, t, dt, this.player.root.position);
-    if (this.state !== "ending") {
+    if (this.state === "showcase") {
+      // The title: drift slowly round the start of the level.
+      const a = t * 0.06;
+      const L = this.L;
+      const c = L.plats[0];
+      this.camera.position.set(c.x + Math.sin(a) * 9, c.y + 3.2 + Math.sin(t * 0.13) * 0.6, c.z + Math.cos(a) * 9);
+      this.camera.lookAt(c.x + Math.sin(a + 2.4) * 2, c.y + 1.2, c.z + Math.cos(a + 2.4) * 2);
+    } else if (this.state !== "ending") {
       // Not touching the mouse? The camera drifts round behind you.
       const sp = Math.hypot(b.vx, b.vz);
       if (this.state === "play" && sp > 2 && this.time - (this.lookT ?? -9) > 1.2) {
@@ -206,6 +295,10 @@ export class Game {
     this.post.fx.vignette = 0.45 + (low ? 0.25 + Math.sin(t * 8) * 0.08 : 0);
     this.post.fx.desat = low ? 0.25 : 0;
     this.post.fx.exposure = this.state === "dying" ? 1 - Math.min(0.7, this.dieT) : 1;
+    // Field of view opens up when you dash and when you're falling fast.
+    const fov = 62 + (b.dashT > 0 ? 12 : 0) + Math.min(6, Math.max(0, -b.vy - 8) * 0.6);
+    this.camera.fov += (fov - this.camera.fov) * Math.min(1, dt * (b.dashT > 0 ? 18 : 5));
+    this.camera.updateProjectionMatrix();
   }
 
   // WASD, relative to where the camera looks.
@@ -241,13 +334,19 @@ export class Game {
         s.dash();
         ui.gain(`−${LIFE.dash}s`, "cost");
         break;
-      case "land":
-        s.land(this.run.body.landed);
+      case "land": {
+        const v = this.run.body.landed;
+        s.land(v);
+        if (v > 9) {
+          p.dust(1.2 + (v - 9) * 0.15);
+          this.trauma = Math.min(1, this.trauma + (v - 9) * 0.04);
+        }
         break;
+      }
       case "pickup": {
         s.pickup(e.p.type);
         ui.gain(`+${PICKUPS[e.p.type].life}s`, "gain");
-        p.burst(18, 2.5);
+        p.streak(e.pos);
         break;
       }
       case "drip":
@@ -255,6 +354,7 @@ export class Game {
         ui.gain(`−${LIFE.drip}s`, "cost");
         ui.flash("drip");
         p.kick(-0.3);
+        this.trauma = Math.min(1, this.trauma + 0.35);
         break;
       case "ignite":
         s.ignite();
@@ -278,7 +378,10 @@ export class Game {
         this.state = "dying";
         this.dieT = 0;
         p.burst(40, 3);
-        if (e.why !== "reset") s.out(e.why);
+        if (e.why !== "reset") {
+          s.out(e.why);
+          this.trauma = Math.min(1, this.trauma + 0.4);
+        }
         ui.died(e.why);
         break;
       case "goal":
@@ -289,7 +392,8 @@ export class Game {
   }
 
   stats() {
-    return { index: this.index, name: this.L.name, time: this.run.time, deaths: this.run.deaths, life: this.run.life };
+    const ps = this.run.st.pickups;
+    return { index: this.index, name: this.L.name, time: this.run.time, deaths: this.run.deaths, life: this.run.life, lamps: ps.filter((k) => k.taken).length, lampsTotal: ps.length, medal: medal(this.L, this.run.time), par: this.L.par };
   }
 
   won() {
@@ -299,6 +403,16 @@ export class Game {
     this.newBest = prev === undefined || this.run.time < prev;
     if (this.newBest) pr.best[this.index] = this.run.time;
     pr.deaths[this.index] = this.run.deaths;
+    const st = this.stats();
+    pr.lamps = pr.lamps ?? {};
+    pr.lamps[this.index] = Math.max(pr.lamps[this.index] ?? 0, st.lamps);
+    pr.lampsTotal = pr.lampsTotal ?? {};
+    pr.lampsTotal[this.index] = st.lampsTotal;
+    if (this.recording && (this.newBest || !this.ghostRun)) {
+      try {
+        localStorage.setItem(GHOST_KEY + this.index, JSON.stringify(this.recording));
+      } catch {}
+    }
     pr.resume = this.index + 1 < LEVELS.length ? { level: this.index + 1, cp: false } : null;
     Game.saveProgress(pr);
     this.reported = false;
@@ -380,6 +494,15 @@ export class Game {
     this.curDist = this.curDist === undefined ? dist : dist < this.curDist ? dist : this.curDist + (dist - this.curDist) * Math.min(1, dt * 3);
     this.camera.position.copy(this.focus).addScaledVector(dir, this.curDist);
     this.camera.lookAt(this.focus.x, this.focus.y + 0.2, this.focus.z);
+    // Shake.
+    this.trauma = Math.max(0, this.trauma - dt * 1.6);
+    const k = this.trauma * this.trauma * 0.12;
+    if (k > 0) {
+      const t = this.time * 40;
+      this.camera.position.x += Math.sin(t * 1.1) * k;
+      this.camera.position.y += Math.sin(t * 1.7 + 1) * k;
+      this.camera.rotation.z += Math.sin(t * 1.3 + 2) * k * 0.5;
+    }
   }
 
   render() {
