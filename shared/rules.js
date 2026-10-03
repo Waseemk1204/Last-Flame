@@ -2,13 +2,13 @@
 
 // What each kind of host burns for, and how far a flame on it can leap.
 export const HOSTS = {
-  match: { burn: 5, range: 2.4, label: "Matchstick" },
-  diya: { burn: 12, range: 3.1, label: "Diya", lamp: true },
-  candle: { burn: 20, range: 2.4, label: "Candle" },
-  agarbatti: { burn: 30, range: 1.6, label: "Agarbatti" },
+  match: { burn: 4.5, range: 2.4, label: "Matchstick" },
+  diya: { burn: 9, range: 3.1, label: "Diya", lamp: true },
+  candle: { burn: 15, range: 2.4, label: "Candle" },
+  agarbatti: { burn: 22, range: 1.6, label: "Agarbatti" },
   sparkler: { burn: 4, range: 5.4, label: "Phuljhadi" },
   rocket: { burn: 0.8, range: 0, label: "Rocket" }, // launches you to its target
-  kandeel: { burn: 26, range: 3.2, label: "Kandeel" }, // rises while it burns
+  kandeel: { burn: 11, range: 3.2, label: "Kandeel" }, // rises while it burns
   akhand: { burn: Infinity, range: 3.2, label: "Akhand deep", checkpoint: true },
   great: { burn: Infinity, range: 0, label: "The temple lamp", final: true },
 };

@@ -143,6 +143,7 @@ export class Game {
             h.ignite();
             h.kept = true;
             h.counted = h.type === "diya";
+            if (h.counted) this.world.warm(h.wickPos());
           }
         }
         this.stats = s.stats ?? this.stats;
@@ -210,7 +211,11 @@ export class Game {
     }
     if (h.id === START && !this.checkpoint) h.fuel = Math.max(h.fuel, 10);
     this.state = "play";
-    if (!quiet) this.sound.catch(h.type);
+    if (!quiet) {
+      this.sound.catch(h.type);
+      this.flare = 1;
+      this.burstSparks(h.wickPos(), 12);
+    }
     // Sections and their titles.
     if (h.section > this.section) {
       this.section = h.section;
@@ -244,7 +249,9 @@ export class Game {
       h.kept = true;
       if (!h.counted) {
         h.counted = true;
-        this.hint("lamps", "Lamps you light stay lit. Light as many as you can.", 4);
+        this.world.warm(h.wickPos());
+        this.popLamp(h.wickPos());
+        this.hint("lamps", "Lamps you light stay lit, and the street wakes up. Light as many as you can.", 4.5);
       }
       this.updateLamps();
     }
@@ -378,7 +385,10 @@ export class Game {
           this.pos.lerpVectors(f.from, top, 1 - (1 - u) * (1 - u));
         } else this.arcPoint(top, f.to, (k - 0.5) / 0.5, this.pos);
         if (Math.random() < 0.8) this.burstSparks(this.pos, 3);
-      } else this.arcPoint(f.from, f.to, k, this.pos);
+      } else {
+        this.arcPoint(f.from, f.to, k, this.pos);
+        if (Math.random() < 0.7) this.burstSparks(this.pos, 2);
+      }
       if (k >= 1) {
         const tgt = f.target;
         if (!tgt.usable) this.toEmber();
@@ -418,18 +428,25 @@ export class Game {
 
     // You.
     this.you.position.copy(this.pos);
-    const strength = this.state === "ember" ? 0.35 * Math.max(0.2, this.emberT / EMBER.time) : this.host ? Math.min(1, 0.45 + this.host.fraction) : 1;
+    this.flare = Math.max(0, (this.flare ?? 0) - dt * 2.5);
+    const strength = (this.flare ?? 0) * 0.8 + (this.state === "ember" ? 0.35 * Math.max(0.2, this.emberT / EMBER.time) : this.host ? Math.min(1, 0.45 + this.host.fraction) : 1);
     this.youFlame.update(t, strength);
     this.youFlame.lean.set(inWind ? 0.6 * Math.sin(t * 9) + 0.5 : Math.sin(t * 3) * 0.06, 0);
     this.youLight.intensity = (this.state === "dead" || this.state === "idle" ? 0 : 0.5 + strength * 0.9) * (this.youFlame.flicker ?? 1);
     this.you.visible = this.state !== "dead" && this.state !== "idle";
     this.updateSparks(dt);
+    this.updatePops(dt);
     this.assignLights();
+    // Leaping kicks the view wider for a moment.
+    const fovWant = this.state === "flight" ? 70 : 62;
+    this.camera.fov += (fovWant - this.camera.fov) * Math.min(1, dt * 6);
+    this.camera.updateProjectionMatrix();
 
     // The camera orbits you, pulled in if a wall is in the way.
     this.updateCamera(dt);
     this.world.follow(this.pos);
     this.world.update(dt, t);
+    this.world.watch(this.state === "ending" ? this.camera.position : this.pos, t);
     this.updateRain(dt, inRain);
     this.updateWind(dt, inWind);
 
@@ -473,6 +490,53 @@ export class Game {
     this.state = "play";
     this.updateLamps();
     this.ui.fade(false);
+  }
+
+  // ------------------------------------------------------- lamp rewards
+  popLamp(at) {
+    if (!this.popTex) {
+      const make = (text) => {
+        const c = document.createElement("canvas");
+        c.width = 128;
+        c.height = 64;
+        const ctx = c.getContext("2d");
+        ctx.font = "600 44px Georgia";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.shadowColor = "rgba(255,140,30,0.9)";
+        ctx.shadowBlur = 14;
+        ctx.fillStyle = "#ffe2a8";
+        ctx.fillText(text, 64, 34);
+        const t = new THREE.CanvasTexture(c);
+        t.colorSpace = THREE.SRGBColorSpace;
+        return t;
+      };
+      this.popTex = make("+1");
+      this.pops = [];
+    }
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.popTex, transparent: true, depthWrite: false, depthTest: false, fog: false }));
+    s.scale.set(0.36, 0.18, 1);
+    s.position.copy(at);
+    s.position.y += 0.15;
+    s.renderOrder = 20;
+    this.scene.add(s);
+    this.pops.push({ s, life: 1.3 });
+    // A chain of lamps lit quickly.
+    this.chain = this.time - (this.lastLampT ?? -99) < 5 ? (this.chain ?? 1) + 1 : 1;
+    this.lastLampT = this.time;
+    if (this.chain >= 3) this.ui.toast(`Chain ×${this.chain}`);
+    this.burstSparks(at, 14);
+  }
+
+  updatePops(dt) {
+    if (!this.pops) return;
+    for (const p of this.pops) {
+      p.life -= dt;
+      p.s.position.y += dt * 0.4;
+      p.s.material.opacity = Math.min(1, p.life * 1.5);
+      if (p.life <= 0) this.scene.remove(p.s);
+    }
+    this.pops = this.pops.filter((p) => p.life > 0);
   }
 
   // ------------------------------------------------------------ the kids
@@ -534,8 +598,10 @@ export class Game {
     if (spraying) {
       if (!kid.sprayed) {
         kid.sprayed = true;
-        if (this.pos.distanceTo(kid.from) < 14) this.sound.spray();
-        this.hint("kids", "Kids with water pistols! Don't be in the stream.", 3);
+        if (this.pos.distanceTo(kid.from) < 14) {
+          this.sound.spray();
+          this.hint("kids", "Kids with water pistols! Don't be in the stream.", 3);
+        }
       }
       const p = kid.water.geometry.attributes.position;
       for (let i = 0; i < p.count; i += 1) {
@@ -745,14 +811,17 @@ export class Game {
     // A flight back down the route, over every lamp you lit.
     const cps = ["great", "cp4", "cp3", "cp2", "cp1"].map((id) => this.byId.get(id).wickPos().clone());
     const pts = cps.map((p, i) => new THREE.Vector3(p.x + 4 + i, p.y + 5 + i * 0.6, p.z - 3));
+    // ...and down to Munni on her doorstep, looking up at the street.
+    const munni = this.world.munniBody.position.clone();
+    pts.push(new THREE.Vector3(2.2, 2.2, 3.2), new THREE.Vector3(0.6, 1.0, 0.4));
     this.flyover = new THREE.CatmullRomCurve3([this.camera.position.clone(), ...pts]);
-    this.lookCurve = new THREE.CatmullRomCurve3([great.wickPos().clone(), ...cps]);
+    this.lookCurve = new THREE.CatmullRomCurve3([great.wickPos().clone(), ...cps, munni.clone().add(new THREE.Vector3(0, 0.6, 0)), munni.clone().add(new THREE.Vector3(0, 0.6, 0))]);
     this.ui.hideHud();
   }
 
   updateEnding(dt) {
     this.endT += dt;
-    const k = Math.min(1, this.endT / 14);
+    const k = Math.min(1, this.endT / 16);
     const e = k * k * (3 - 2 * k);
     this.camera.position.copy(this.flyover.getPoint(e));
     this.camera.lookAt(this.lookCurve.getPoint(Math.min(1, e * 1.05)));
@@ -760,7 +829,7 @@ export class Game {
       const a = Math.random() * Math.PI * 2;
       this.world.fireworks.launch(10 + Math.cos(a) * 30, 60 + Math.sin(a) * 20, { near: true });
     }
-    if (this.endT > 15 && this.state === "ending") {
+    if (this.endT > 18 && this.state === "ending") {
       this.state = "done";
       this.onEnd?.({ lamps: this.lampsLit, total: this.lampTotal, deaths: this.stats.deaths, time: this.stats.time });
     }

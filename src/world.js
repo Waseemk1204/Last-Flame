@@ -27,8 +27,15 @@ export function canvasTex(w, h, draw, { repeat = false, srgb = true } = {}) {
 const hex = (c) => `#${c.toString(16).padStart(6, "0")}`;
 
 // A wall: plaster in a colour, stains, and a grid of shuttered windows.
-function wallTexture(color, floors, bays) {
-  return canvasTex(256, 256, (ctx, w, h) => {
+// Returns the colour map and a matching glow map: the windows that will
+// light up when the street comes back to life.
+function wallTextures(color, floors, bays) {
+  const glowCanvas = document.createElement("canvas");
+  glowCanvas.width = glowCanvas.height = 256;
+  const gctx = glowCanvas.getContext("2d");
+  gctx.fillStyle = "#000";
+  gctx.fillRect(0, 0, 256, 256);
+  const map = canvasTex(256, 256, (ctx, w, h) => {
     ctx.fillStyle = hex(color);
     ctx.fillRect(0, 0, w, h);
     for (let i = 0; i < 1800; i += 1) {
@@ -54,26 +61,38 @@ function wallTexture(color, floors, bays) {
         const wh = fh * 0.52;
         ctx.fillStyle = "#1a1d26";
         ctx.fillRect(x, y, ww, wh);
-        // Shutters, sometimes open.
+        const open = rand() < 0.6;
         ctx.fillStyle = ["#2f5d62", "#7a3b2e", "#3a4f7a", "#5e6b3a"][(f + b) % 4];
-        if (rand() < 0.6) {
+        if (open) {
           ctx.fillRect(x - ww * 0.32, y, ww * 0.3, wh);
           ctx.fillRect(x + ww * 1.02, y, ww * 0.3, wh);
+          // This window can glow: warm lamp light behind the grille.
+          if (rand() < 0.75) {
+            const gg = gctx.createRadialGradient(x + ww / 2, y + wh * 0.6, 2, x + ww / 2, y + wh * 0.6, ww * 0.9);
+            gg.addColorStop(0, "#ffd08a");
+            gg.addColorStop(1, "#a0480c");
+            gctx.fillStyle = gg;
+            gctx.fillRect(x, y, ww, wh);
+          }
         } else ctx.fillRect(x, y, ww, wh);
-        // Grille.
         ctx.strokeStyle = "rgba(20,20,20,0.6)";
+        gctx.strokeStyle = "#000";
         for (let k = 1; k < 4; k += 1) {
-          ctx.beginPath();
-          ctx.moveTo(x + (k * ww) / 4, y);
-          ctx.lineTo(x + (k * ww) / 4, y + wh);
-          ctx.stroke();
+          for (const c of [ctx, gctx]) {
+            c.beginPath();
+            c.moveTo(x + (k * ww) / 4, y);
+            c.lineTo(x + (k * ww) / 4, y + wh);
+            c.stroke();
+          }
         }
-        // A sunshade over it.
         ctx.fillStyle = "rgba(0,0,0,0.25)";
         ctx.fillRect(x - 6, y - 6, ww + 12, 5);
       }
     }
   });
+  const glow = new THREE.CanvasTexture(glowCanvas);
+  glow.colorSpace = THREE.SRGBColorSpace;
+  return { map, glow };
 }
 
 function rangoliTexture() {
@@ -126,10 +145,12 @@ export class World {
     this.scene = scene;
     this.group = new THREE.Group();
     scene.add(this.group);
+    this.houses = [];
     this.sky(scene);
     this.ground();
     for (const b of BUILDINGS) this.building(b);
     this.courtyard();
+    this.munni();
     this.hill();
     this.wires();
     this.city();
@@ -233,10 +254,21 @@ export class World {
       return;
     }
     const floors = Math.max(1, Math.round(b.h / 3));
-    const texX = wallTexture(b.color, floors, Math.max(1, Math.round(w / 3)));
-    const texZ = wallTexture(b.color, floors, Math.max(1, Math.round(d / 3)));
+    const texX = wallTextures(b.color, floors, Math.max(1, Math.round(w / 3)));
+    const texZ = wallTextures(b.color, floors, Math.max(1, Math.round(d / 3)));
     const roofM = mat(0x8a8478, { r: 1 });
-    const mats = [mat(0xffffff, { map: texZ }), mat(0xffffff, { map: texZ }), roofM, roofM, mat(0xffffff, { map: texX }), mat(0xffffff, { map: texX })];
+    const wallM = (t) => {
+      const mm = mat(0xffffff, { map: t.map });
+      mm.emissiveMap = t.glow;
+      mm.emissive = new THREE.Color(0xffffff);
+      mm.emissiveIntensity = 0;
+      return mm;
+    };
+    const sideZ = wallM(texZ);
+    const sideX = wallM(texX);
+    const mats = [sideZ, sideZ, roofM, roofM, sideX, sideX];
+    // How awake this house is: its windows warm up as lamps are lit near it.
+    this.houses.push({ b, mats: [sideZ, sideX], warmth: 0, target: 0 });
     const m = new THREE.Mesh(new THREE.BoxGeometry(w, b.h, d), mats);
     m.position.set(cx, b.h / 2, cz);
     m.castShadow = true;
@@ -309,6 +341,72 @@ export class World {
     }
     box(this.group, mat(0x8a8070), 8.9, 0.62, 5.4, 0.6, 1.24, 0.6); // a pillar for the diya
     box(this.group, mat(0x6a4a2a), 9.6, 0.22, 6.5, 0.5, 0.44, 0.5); // crate
+  }
+
+  // Munni: nine, in a yellow frock with two plaits, sitting on her doorstep
+  // with the empty matchbox. She watches you go.
+  munni() {
+    const g = new THREE.Group();
+    const skin = mat(0x9a6a4a, { r: 0.8 });
+    const frock = mat(0xf2b928, { r: 0.85 });
+    const hair = mat(0x15100c, { r: 0.6 });
+    const add = (geo, m, x, y, z, rx = 0, ry = 0, rz = 0) => {
+      const o = new THREE.Mesh(geo, m);
+      o.position.set(x, y, z);
+      o.rotation.set(rx, ry, rz);
+      o.castShadow = true;
+      g.add(o);
+      return o;
+    };
+    // Sitting: skirt over the knees, legs down the step.
+    add(new THREE.CylinderGeometry(0.11, 0.2, 0.3, 14), frock, 0, 0.22, 0.05);
+    add(new THREE.CapsuleGeometry(0.11, 0.2, 4, 10), frock, 0, 0.45, 0);
+    for (const s of [-1, 1]) {
+      add(new THREE.CapsuleGeometry(0.035, 0.22, 3, 8), skin, s * 0.06, 0.12, 0.2, 1.2);
+      add(new THREE.CapsuleGeometry(0.033, 0.2, 3, 8), skin, s * 0.06, -0.08, 0.32);
+    }
+    // Arms on her knees, the matchbox in her hands.
+    for (const s of [-1, 1]) add(new THREE.CapsuleGeometry(0.03, 0.2, 3, 8), skin, s * 0.1, 0.42, 0.1, -0.9, 0, s * 0.2);
+    add(new THREE.BoxGeometry(0.06, 0.02, 0.04), mat(0xd8b830), 0, 0.36, 0.22);
+    const head = new THREE.Group();
+    head.position.set(0, 0.68, 0);
+    g.add(head);
+    const h = new THREE.Mesh(new THREE.SphereGeometry(0.1, 18, 14), skin);
+    h.scale.set(0.9, 1.05, 0.95);
+    h.castShadow = true;
+    head.add(h);
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.105, 18, 10, 0, Math.PI * 2, 0, Math.PI * 0.6), hair);
+    cap.rotation.x = -0.4;
+    cap.position.y = 0.01;
+    head.add(cap);
+    for (const s of [-1, 1]) {
+      for (let i = 0; i < 5; i += 1) {
+        const p = new THREE.Mesh(new THREE.SphereGeometry(0.022 - i * 0.002, 8, 6), hair);
+        p.position.set(s * 0.07, -0.04 - i * 0.04, -0.05);
+        head.add(p);
+      }
+      const ribbon = new THREE.Mesh(new THREE.SphereGeometry(0.02, 8, 6), mat(0xd81b60));
+      ribbon.position.set(s * 0.07, -0.24, -0.05);
+      head.add(ribbon);
+    }
+    g.position.set(-0.9, 0.34, -2.85);
+    g.rotation.y = 0.35;
+    this.group.add(g);
+    this.munniBody = g;
+    this.munniHead = head;
+  }
+
+  // She turns her head to follow your flame while you're near.
+  watch(p, t) {
+    const g = this.munniBody;
+    const d = Math.hypot(p.x - g.position.x, p.z - g.position.z);
+    let want = 0;
+    if (d < 12) {
+      want = Math.atan2(p.x - g.position.x, p.z - g.position.z) - g.rotation.y;
+      want = Math.max(-1.1, Math.min(1.1, want));
+    }
+    this.munniHead.rotation.y += (want - this.munniHead.rotation.y) * 0.05;
+    this.munniHead.rotation.x = d < 12 ? -Math.min(0.5, Math.max(0, (p.y - 0.8) * 0.3)) : 0.15 + Math.sin(t * 0.5) * 0.03;
   }
 
   hill() {
@@ -434,7 +532,30 @@ export class World {
     this.moon.position.set(p.x - 12, p.y + 30, p.z - 4);
   }
 
+  // A lamp was lit here: the nearest house wakes a little.
+  warm(p) {
+    let best = null;
+    let bestD = 6;
+    for (const h of this.houses) {
+      const { b } = h;
+      const dx = Math.max(b.x1 - p.x, 0, p.x - b.x2);
+      const dz = Math.max(b.z1 - p.z, 0, p.z - b.z2);
+      const d = Math.hypot(dx, dz);
+      if (d < bestD) {
+        bestD = d;
+        best = h;
+      }
+    }
+    if (best) best.target = Math.min(1, best.target + 0.22);
+    return best;
+  }
+
   update(dt, t) {
+    for (const h of this.houses) {
+      h.warmth += (h.target - h.warmth) * Math.min(1, dt * 0.7);
+      const flick = 1 + Math.sin(t * 3 + h.b.x1) * 0.04;
+      for (const m of h.mats) m.emissiveIntensity = h.warmth * 1.4 * flick;
+    }
     for (const c of this.clouds) {
       c.a += c.speed * dt;
       c.s.position.x = Math.cos(c.a) * 220;

@@ -22,7 +22,7 @@ const MAT = {
   dark: m(0x2a2420, { r: 0.8 }),
   wire: m(0x8a8a8a, { m: 0.7, r: 0.4 }),
   glass: m(0x6fa07a, { r: 0.1, transparent: true, opacity: 0.55 }),
-  paper: m(0xff7a2a, { r: 0.9, side: THREE.DoubleSide, emissive: 0x000000 }),
+  paper: m(0xd84315, { r: 0.9, side: THREE.DoubleSide, emissive: 0x000000 }),
   rocketBody: m(0xd8302a, { r: 0.6 }),
   sand: m(0xc9b07a, { r: 1 }),
   wick: m(0xe8e0cc, { r: 1 }),
@@ -110,12 +110,27 @@ function model(type) {
       break;
     }
     case "kandeel": {
-      const paper = mesh(new THREE.CylinderGeometry(0.11, 0.08, 0.26, 10, 1, true), MAT.paper, 0, 0.18, 0);
-      g.add(paper);
-      g.add(mesh(new THREE.TorusGeometry(0.08, 0.004, 4, 16), MAT.wire, 0, 0.05, 0)).rotation.x = Math.PI / 2;
-      g.add(mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.02, 8), MAT.wax, 0, 0.06, 0));
-      wick.position.set(0, 0.08, 0);
-      g.userData.paper = paper;
+      // A star kandeel: two stacked pyramids of paper, points all round,
+      // a tassel hanging below, lit from inside.
+      const star = new THREE.Group();
+      star.position.y = 0.2;
+      const body = mesh(new THREE.OctahedronGeometry(0.11, 0), MAT.paper);
+      body.scale.set(1, 1.15, 1);
+      star.add(body);
+      for (let i = 0; i < 6; i += 1) {
+        const a = (i / 6) * Math.PI * 2;
+        const point = mesh(new THREE.ConeGeometry(0.035, 0.11, 4), MAT.paper, Math.cos(a) * 0.1, 0, Math.sin(a) * 0.1);
+        point.rotation.z = -Math.PI / 2;
+        point.rotation.y = -a;
+        star.add(point);
+      }
+      g.add(star);
+      const tassel = mesh(new THREE.CylinderGeometry(0.004, 0.012, 0.14, 6), m(0xfbc02d), 0, 0.02, 0);
+      g.add(tassel);
+      g.add(mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.02, 8), MAT.wax, 0, 0.16, 0));
+      wick.position.set(0, 0.18, 0);
+      g.userData.paper = body;
+      g.userData.star = star;
       break;
     }
     case "akhand": {
@@ -290,6 +305,7 @@ export class Host {
       const r = this.data.rise;
       this.group.position.set(this.start.x + (r[0] - this.start.x) * k, this.start.y + (r[1] - this.start.y) * k + Math.sin(t * 1.3) * 0.03, this.start.z + (r[2] - this.start.z) * k);
     }
+    if (this.group.userData.star) this.group.userData.star.rotation.y = t * 0.5;
     if (this.lit) this.flame.update(t, this.kept ? 0.85 : 0.35 + 0.65 * Math.min(1, this.fraction * 2.5));
     if (this.ringFlames && this.lit) for (const f of this.ringFlames) f.update(t, 1);
   }
