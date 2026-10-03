@@ -29,6 +29,7 @@ export const LIFE = {
   wind: 2.5, // drain multiplier in a gust
   rain: 1.8, // drain multiplier in the open in rain
   low: 5, // the HUD warns below this
+  assist: 0.7, // assist mode: life drains this fast
 };
 
 // Things you can burn: run through them to take their flame.

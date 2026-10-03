@@ -80,6 +80,7 @@
           </label>
           <label class="check"><input id="set-invert" type="checkbox" /> Invert mouse Y</label>
           <label class="check"><input id="set-ghost" type="checkbox" /> Show the ghost of your best run</label>
+          <label class="check"><input id="set-assist" type="checkbox" /> Assist: your flame burns 30% slower (no records)</label>
           <button id="btn-settings-back" class="btn" type="button">Back</button>
           <p class="credits">
             LAST FLAME — made for BYOG 2026 (theme: Everything is Temporary).<br />
@@ -129,11 +130,15 @@
 
       <section id="final" class="screen final hidden">
         <div class="panel">
-          <p class="win-n">Level 9 of 9</p>
+          <p class="win-n">All nine levels</p>
           <h2 class="final-h">The Will of Fire</h2>
           <p id="final-stats" class="win-stats"></p>
+          <p id="final-medals" class="final-medals"></p>
+          <table id="final-table" class="final-table"></table>
           <nav class="menu">
-            <button id="btn-final-title" class="btn" type="button">Title</button>
+            <button id="btn-share" class="btn" type="button">Copy my result</button>
+            <button id="btn-final-levels" class="btn ghost" type="button">Chase better medals</button>
+            <button id="btn-final-title" class="btn ghost" type="button">Title</button>
           </nav>
         </div>
       </section>

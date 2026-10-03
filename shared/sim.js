@@ -18,6 +18,9 @@ export class LevelState {
     this.drips = level.drips.map((d) => ({ ...d, hit: -1, y: d.top }));
     this.winds = level.winds.map((w) => ({ ...w, active: false }));
     this.cpReached = false;
+    this.collapseT = null; // the way behind you falling, once it starts
+    // Route platforms in order, for the collapse.
+    this.routeIndex = new Map(level.plats.filter((p) => p.route).map((p, i) => [p.id, i]));
     this.place();
     for (const p of this.plats) p.mx = p.my = p.mz = 0;
     this.list = [];
@@ -34,6 +37,8 @@ export class LevelState {
     c.drips = this.drips.map((d) => ({ ...d }));
     c.winds = this.winds.map((w) => ({ ...w }));
     c.cpReached = this.cpReached;
+    c.collapseT = this.collapseT;
+    c.routeIndex = this.routeIndex;
     c.list = [];
     c.build();
     return c;
@@ -41,7 +46,8 @@ export class LevelState {
 
   // Back to how it was when you reached your last checkpoint (or began).
   reset() {
-    for (const p of this.plats) Object.assign(p, { alive: true, touch: 0, burning: false, burnT: 0, regrowT: 0, melt: 0, idle: 0, fading: false, crumbleT: 0 });
+    for (const p of this.plats) Object.assign(p, { alive: true, touch: 0, burning: false, burnT: 0, regrowT: 0, melt: 0, idle: 0, fading: false, crumbleT: 0, collapsing: false });
+    this.collapseT = this.cpReached && this.level.collapse ? 0 : null;
     for (const p of this.pickups) p.taken = p.banked;
     for (const d of this.drips) d.hit = -1;
     this.place();
@@ -94,10 +100,35 @@ export class LevelState {
     this.t += dt;
     this.place();
     const ev = [];
+    // The collapse: from the checkpoint on, each platform on the route
+    // starts to crumble in turn, `every` seconds apart.
+    const C = this.level.collapse;
+    if (C && this.collapseT !== null) {
+      this.collapseT += dt;
+      const start = this.routeIndex.get(this.level.cp.on);
+      for (const p of this.plats) {
+        const ri = this.routeIndex.get(p.def.id);
+        if (ri === undefined || ri < start || p.def.id === this.level.goal.on || p.collapsing || !p.alive) continue;
+        if (this.collapseT >= C.delay + (ri - start) * C.every) {
+          p.collapsing = true;
+          p.crumbleT = 0.0001;
+        }
+      }
+    }
     for (const p of this.plats) {
       const d = p.def;
       const on = body && body.grounded && body.ground === d.id;
       p.dmelt = 0;
+      if (p.collapsing) {
+        if (p.alive) {
+          p.crumbleT += dt;
+          if (p.crumbleT >= CRUMBLE.fuse) {
+            p.alive = false;
+            ev.push({ type: "crumble", plat: p });
+          }
+        }
+        continue;
+      }
       if (d.crumble) {
         if (p.alive && (on || p.crumbleT > 0)) {
           p.crumbleT = (p.crumbleT ?? 0) + dt;
@@ -192,8 +223,9 @@ function insideFootprint(b, p) {
 
 // A whole attempt at a level: the level, you, and your life.
 export class Run {
-  constructor(level) {
+  constructor(level, { assist = false } = {}) {
     this.level = level;
+    this.assist = assist; // a gentler flame: life drains slower
     this.st = new LevelState(level);
     this.body = makeBody(...level.start);
     this.life = level.life;
@@ -244,7 +276,7 @@ export class Run {
     if (w) drain *= LIFE.wind;
     if (this.inRain) drain *= LIFE.rain;
     this.drain = drain;
-    this.life -= dt * drain;
+    this.life -= dt * drain * (this.assist ? LIFE.assist : 1);
     // Things to burn.
     for (const p of st.pickups) {
       if (p.taken) continue;
@@ -284,6 +316,10 @@ export class Run {
       this.spawnLife = this.level.cpLife;
       this.life = Math.max(this.life, this.level.cpLife);
       ev.push({ type: "checkpoint" });
+      if (this.level.collapse) {
+        st.collapseT = 0;
+        ev.push({ type: "collapse" });
+      }
     }
     const g = this.level.goal;
     if (b.grounded && b.ground === g.on && Math.hypot(b.x - g.x, b.z - g.z) < 1.4) {

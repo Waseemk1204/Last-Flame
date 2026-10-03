@@ -726,6 +726,30 @@ export class World {
       const v = this.platViews.get(p.def.id);
       const d = p.def;
       v.group.position.set(p.x, p.y, p.z);
+      // The collapse in the last level takes any kind of platform.
+      if (p.collapsing) {
+        v.collapsed = true;
+        if (p.alive) {
+          v.fall = 0;
+          v.fallV = 0;
+          v.group.position.x += Math.sin(t * 60) * 0.05 * Math.min(1, p.crumbleT / 0.9);
+          if (rand() < dt * 30) this.ash.emit(p.x + (rand() - 0.5) * d.w, p.y, p.z + (rand() - 0.5) * d.d, 0, rand() * 1.5, 0);
+        } else {
+          v.fallV += dt * 14;
+          v.fall += v.fallV * dt;
+          v.group.position.y -= v.fall;
+          v.group.rotation.x = v.fall * 0.08;
+          v.group.rotation.z = v.fall * 0.05;
+          v.group.visible = v.fall < 40;
+        }
+        continue;
+      }
+      if (v.collapsed) {
+        v.collapsed = false;
+        v.group.rotation.set(0, 0, 0);
+        v.group.visible = true;
+        if (v.mesh) v.mesh.visible = true;
+      }
       if (d.crumble) {
         if (p.alive) {
           v.fall = 0;

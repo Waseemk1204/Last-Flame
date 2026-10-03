@@ -43,6 +43,7 @@ squashes when it lands, and it shrinks and reddens as your life runs down.
 | Drops | fall from the dark on a beat; a shadow darkens under each; −4 s |
 | Wind | gusts across your path; dust stirs before each one |
 | Rain | level 7: everywhere, except under the roofs |
+| Collapse | level 9: from the checkpoint on, the route falls away behind you, one platform every 1.4 s (the bot survives down to 0.9 s) |
 | Crumbling stone | levels 8–9: glowing cracks; falls 0.9 s after you touch it, back only when you respawn |
 
 ## Levels (shared/levels.js)
@@ -84,6 +85,22 @@ Difficulty: the bot's lowest life falls from about 11 s on level 1 to about
   each lamp you burn.
 - The title screen is the furthest level you've reached, idling behind the
   menu.
+
+## Sound
+
+Each level has its own ambience under the pads: wind chimes (1–2), paper
+rustle (3), a wax hum (4), drips (5), howling wind (6), thunder (7),
+distant rumbles (8), and in level 9 the Will of Fire's theme on a soft bell,
+the Eternal Fire's roar as you near it, and the ground shaking during the
+collapse.
+
+## Assist and results
+
+- **Assist** (Settings): life drains 30% slower. Assist runs don't set best
+  times or ghosts, and say so.
+- **Final screen**: this playthrough's total time and deaths, every level's
+  best time and medal, lamps found, and a "Copy my result" button that puts
+  a short share text (medal emoji row, time, lamps, link) on the clipboard.
 
 ## Ending
 

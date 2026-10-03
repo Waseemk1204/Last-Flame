@@ -29,6 +29,7 @@ export class Sound extends AudioEngine {
     this.roar = this.loop({ kind: "brown", freq: 180, q: 0.7, gain: 0, out: this.sfx });
     this.rainLoop = this.loop({ kind: "pink", freq: 3000, q: 0.4, type: "lowpass", gain: 0, out: this.sfx });
     this.windLoop = this.loop({ kind: "pink", freq: 600, q: 2, type: "bandpass", gain: 0, out: this.sfx });
+    this.quakeLoop = this.loop({ kind: "brown", freq: 90, q: 0.8, gain: 0, out: this.sfx });
     this.padOut = this.ctx.createGain();
     this.padOut.gain.value = 0.5;
     this.padOut.connect(this.master);
@@ -46,7 +47,7 @@ export class Sound extends AudioEngine {
     for (const d of [-5, 4]) this.tone({ freq, type: "triangle", duration: dur, gain, attack: 2.2, detune: d, out: this.padOut });
   }
 
-  update(dt, { life01 = 1, playing = true, wind = 0, rain = 0, fire = 0, low = false } = {}) {
+  update(dt, { life01 = 1, playing = true, wind = 0, rain = 0, fire = 0, low = false, quake = 0 } = {}) {
     if (!this.started) return;
     this.time += dt;
     const t = this.time;
@@ -74,9 +75,44 @@ export class Sound extends AudioEngine {
     this.fade(this.rainLoop.gain.gain, rain * 0.16, 0.8);
     this.fade(this.windLoop.gain.gain, wind * 0.14, 0.3);
     this.fade(this.roar.gain.gain, fire * 0.25, 0.5);
+    this.fade(this.quakeLoop.gain.gain, quake * 0.3, 0.4);
+    this.ambience(t, due);
     this.windLoop.filter.frequency.value = 500 + Math.sin(t * 2) * 200;
     this.streakT -= dt;
     if (this.streakT <= 0) this.streak = 0;
+  }
+
+  // Each level has a sound of its own under the music.
+  ambience(t, due) {
+    const L = this.level ?? 0;
+    const amb = this.amb;
+    if (L <= 1 && due("chime", 3, 8)) {
+      // Wind chimes, far off.
+      const n = 2 + Math.floor(Math.random() * 3);
+      for (let i = 0; i < n; i += 1) this.tone({ freq: note(10 + this.root + Math.floor(Math.random() * 5)), type: "triangle", duration: 2.2, gain: 0.012, delay: i * (0.12 + Math.random() * 0.2), out: amb });
+    }
+    if (L === 2 && due("rustle", 2, 5)) for (let i = 0; i < 5; i += 1) this.burst({ duration: 0.05, gain: 0.02, freq: 4000 + Math.random() * 3000, q: 1, type: "highpass", delay: i * 0.06, out: amb });
+    if (L === 3 && due("hum", 6, 6)) this.tone({ freq: 55, type: "sine", duration: 6.5, gain: 0.05, attack: 2, out: amb });
+    if (L === 4 && due("plink", 0.7, 2.4)) {
+      const f = 900 + Math.random() * 900;
+      this.tone({ freq: f, type: "sine", duration: 0.25, gain: 0.03, slideTo: f * 0.6, out: amb });
+      this.tone({ freq: f, type: "sine", duration: 0.25, gain: 0.01, slideTo: f * 0.6, delay: 0.32, out: amb });
+    }
+    if (L === 5 && due("howl", 4, 9)) this.burst({ duration: 3, gain: 0.05, freq: 300, q: 6, slideTo: 700, attack: 1, out: amb });
+    if (L === 6 && due("thunder", 9, 18)) {
+      this.burst({ duration: 3.5, gain: 0.2, freq: 120, q: 0.5, type: "lowpass", kind: "brown", attack: 0.05, out: amb });
+      this.burst({ duration: 0.4, gain: 0.08, freq: 2000, q: 0.5, out: amb });
+    }
+    if (L === 7 && due("rumble", 3, 8)) this.burst({ duration: 2, gain: 0.08, freq: 80, q: 0.7, type: "lowpass", kind: "brown", attack: 0.3, out: amb });
+    if (L === 8 && due("melody", 0.55, 0.55)) {
+      // The Will of Fire's theme, on a soft bell: rises, then comes home.
+      const tune = [0, 2, 4, null, 5, 4, 2, null, 4, 5, 7, null, 9, 7, 5, 4, 2, null, 0, null, null, null];
+      const k = tune[(this.tuneI = ((this.tuneI ?? -1) + 1) % tune.length)];
+      if (k !== null) {
+        this.tone({ freq: note(k + 5), type: "sine", duration: 1.4, gain: 0.04, out: this.padOut });
+        this.tone({ freq: note(k + 10), type: "sine", duration: 0.7, gain: 0.01, out: this.padOut });
+      }
+    }
   }
 
   jump() {
@@ -124,6 +160,10 @@ export class Sound extends AudioEngine {
   crumble() {
     this.burst({ duration: 0.9, gain: 0.14, freq: 160, q: 0.6, type: "lowpass", slideTo: 60 });
     for (let i = 0; i < 6; i += 1) this.burst({ duration: 0.06, gain: 0.04, freq: 900 + Math.random() * 900, q: 2, delay: Math.random() * 0.5 });
+  }
+  collapse() {
+    this.burst({ duration: 2.4, gain: 0.25, freq: 70, q: 0.6, type: "lowpass", kind: "brown", attack: 0.1 });
+    this.tone({ freq: note(this.root - 5), type: "sawtooth", duration: 2, gain: 0.03, slideTo: note(this.root - 10) });
   }
   blink() {
     this.tone({ freq: 1760, duration: 0.25, gain: 0.015, slideTo: 880 });

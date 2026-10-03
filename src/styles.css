@@ -105,6 +105,13 @@ kbd { font: 600 10px var(--sans); border: 1px solid rgba(243, 231, 208, 0.4); bo
 .win-best { font-size: 12px; letter-spacing: 0.25em; text-transform: uppercase; color: #ffd680; min-height: 18px; margin: 0 0 26px; }
 .final { background: radial-gradient(ellipse at 50% 60%, rgba(60, 20, 4, 0.75), rgba(5, 6, 12, 0.94)); }
 .final-h { color: #ffc878; font-size: clamp(36px, 6vw, 60px) !important; letter-spacing: 0.15em !important; }
+.final .panel { max-width: 560px; }
+.final-medals { font-size: 13px; letter-spacing: 0.12em; color: var(--dim); margin: 0 0 14px; }
+.final-medals .medal { margin-left: 10px; }
+.final-table { width: 100%; border-collapse: collapse; margin: 0 0 22px; font-size: 13px; }
+.final-table td { padding: 4px 6px; border-bottom: 1px solid rgba(243, 231, 208, 0.08); text-align: left; color: var(--dim); }
+.final-table td:first-child { color: var(--ink); font-family: var(--serif); font-size: 17px; }
+.final-table td.r { text-align: right; font-variant-numeric: tabular-nums; }
 .fade { position: absolute; inset: 0; background: #000; pointer-events: none; opacity: 0; transition: opacity 0.5s; }
 .fade.on { opacity: 1; }
 @media (max-width: 760px) {

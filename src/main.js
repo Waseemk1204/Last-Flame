@@ -10,7 +10,7 @@ const $ = (s) => document.querySelector(s);
 
 // ---------------------------------------------------------------- settings
 const KEY = "lastflame.settings";
-const settings = { sens: 0.0024, vol: 0.9, quality: "high", invert: false, ghost: true };
+const settings = { sens: 0.0024, vol: 0.9, quality: "high", invert: false, ghost: true, assist: false };
 try {
   Object.assign(settings, JSON.parse(localStorage.getItem(KEY) || "{}"));
 } catch {}
@@ -187,6 +187,7 @@ function applySettings() {
   sound.setVolume(settings.vol);
   game.setQuality(settings.quality);
   game.showGhost = settings.ghost;
+  game.assist = settings.assist;
 }
 applySettings();
 
@@ -235,6 +236,7 @@ $("#btn-play").addEventListener("click", () => {
   sound.begin();
   const p = Game.progress();
   p.resume = null;
+  p.campaign = { time: 0, deaths: 0, levels: 0, assist: false };
   Game.saveProgress(p);
   intro(() => begin(0));
 });
@@ -328,6 +330,7 @@ function openSettings(back) {
   $("#set-quality").value = settings.quality;
   $("#set-invert").checked = settings.invert;
   $("#set-ghost").checked = settings.ghost;
+  $("#set-assist").checked = settings.assist;
   show("#settings");
 }
 for (const [id, key, kind] of [
@@ -336,6 +339,7 @@ for (const [id, key, kind] of [
   ["#set-quality", "quality", "str"],
   ["#set-invert", "invert", "bool"],
   ["#set-ghost", "ghost", "bool"],
+  ["#set-assist", "assist", "bool"],
 ]) {
   $(id).addEventListener("input", (e) => {
     settings[key] = kind === "num" ? Number(e.target.value) : kind === "bool" ? e.target.checked : e.target.value;
@@ -355,7 +359,8 @@ game.onWin = (s) => {
   $("#win-medal").innerHTML = `<i class="medal ${s.medal}"></i>${s.medal}`;
   $("#win-stats").textContent = `${fmt(s.time)} · ${s.lamps} / ${s.lampsTotal} lamps · went out ${s.deaths} time${s.deaths === 1 ? "" : "s"}`;
   $("#win-par").textContent = s.medal === "gold" ? `Gold is under ${fmt(s.par[0])}` : `Gold under ${fmt(s.par[0])} · silver under ${fmt(s.par[1])}`;
-  $("#win-best").textContent = game.newBest ? "New best time" : `Best ${fmt(Game.progress().best[s.index])}`;
+  const bestT = Game.progress().best[s.index];
+  $("#win-best").textContent = s.assist ? "Assist on · no records" : game.newBest ? "New best time" : bestT !== undefined ? `Best ${fmt(bestT)}` : "";
   show("#win");
 };
 function next() {
@@ -366,12 +371,33 @@ $("#btn-replay").addEventListener("click", () => begin(game.index));
 $("#btn-win-levels").addEventListener("click", () => openLevels("#win"));
 
 // The end.
-game.onFinale = ({ time, deaths }) => {
+let shareText = "";
+game.onFinale = (T) => {
   running = false;
   document.exitPointerLock?.();
-  $("#final-stats").textContent = `All nine levels · best times ${fmt(time)} · went out ${deaths} time${deaths === 1 ? "" : "s"}`;
+  const c = T.campaign;
+  const full = c && c.levels >= LEVELS.length;
+  $("#final-stats").textContent = full
+    ? `This playthrough: ${fmt(c.time)} · went out ${c.deaths} time${c.deaths === 1 ? "" : "s"}${c.assist ? " · assist" : ""}`
+    : `Best times together: ${fmt(T.bestTotal)}`;
+  $("#final-medals").innerHTML = `${T.lamps} / ${T.lampsTotal} lamps <i class="medal gold"></i>${T.golds} <i class="medal silver"></i>${T.silvers} <i class="medal bronze"></i>${T.bronzes}`;
+  $("#final-table").innerHTML = T.rows
+    .map((r, i) => `<tr><td>${i + 1}. ${r.name}</td><td class="r">${r.medal ? `<i class="medal ${r.medal}"></i>${fmt(r.best)}` : "—"}</td><td class="r">${r.lamps} / ${r.lampsTotal}</td></tr>`)
+    .join("");
+  const dots = T.rows.map((r) => ({ gold: "🥇", silver: "🥈", bronze: "🥉" })[r.medal] ?? "·").join("");
+  shareText = `LAST FLAME 🔥 I carried the fire home.\n${dots}\n${full ? `${fmt(c.time)} · went out ${c.deaths}× · ` : ""}${T.lamps}/${T.lampsTotal} lamps\n${location.href.split("?")[0]}`;
   show("#final");
 };
+$("#btn-share").addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText(shareText);
+    $("#btn-share").textContent = "Copied";
+  } catch {
+    $("#btn-share").textContent = "Couldn't copy";
+  }
+  setTimeout(() => ($("#btn-share").textContent = "Copy my result"), 1800);
+});
+$("#btn-final-levels").addEventListener("click", () => openLevels("#final"));
 $("#btn-final-title").addEventListener("click", () => {
   refreshTitle();
   show("#title");

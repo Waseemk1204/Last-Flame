@@ -96,7 +96,7 @@ export class Game {
     this.index = index;
     this.L = L;
     this.world.load(L, index);
-    this.run = new Run(L);
+    this.run = new Run(L, { assist: !!this.assist && !auto });
     if (fromCp && L.cp) {
       this.run.st.cpReached = true;
       this.run.spawn = [L.cp.x, L.cp.y + 0.05, L.cp.z];
@@ -296,7 +296,7 @@ export class Game {
       this.ui.run(run.time, this.L.par, n, ps.length);
     }
     const near = this.L.final ? Math.max(0, 1 - Math.hypot(b.x - this.L.goal.x, b.z - this.L.goal.z, b.y - this.L.goal.y) / 25) : 0;
-    this.sound.update(dt, { life01, playing: this.state === "play", wind: run.inWind ? 1 : 0, rain: this.L.rain ? (run.inRain ? 1 : 0.4) : 0, fire: this.state === "ending" ? 1 : near, low });
+    this.sound.update(dt, { life01, playing: this.state === "play", wind: run.inWind ? 1 : 0, rain: this.L.rain ? (run.inRain ? 1 : 0.4) : 0, fire: this.state === "ending" ? 1 : near, low, quake: this.state === "play" && run.st.collapseT !== null ? 1 : 0 });
     this.sound.listen?.(this.camera.position.x, this.camera.position.y, this.camera.position.z, Math.sin(this.yaw), Math.cos(this.yaw));
     this.post.fx.vignette = 0.45 + (low ? 0.25 + Math.sin(t * 8) * 0.08 : 0);
     this.post.fx.desat = low ? 0.25 : 0;
@@ -368,6 +368,12 @@ export class Game {
       case "gone":
         s.gone();
         break;
+      case "collapse":
+        s.collapse();
+        ui.toast("The way behind you is falling");
+        setTimeout(() => this.state === "play" && ui.hint("Run!", 2), 900);
+        this.trauma = Math.min(1, this.trauma + 0.5);
+        break;
       case "crumble":
         if (Math.hypot(e.plat.x - this.run.body.x, e.plat.z - this.run.body.z) < 10) {
           s.crumble();
@@ -405,22 +411,29 @@ export class Game {
 
   stats() {
     const ps = this.run.st.pickups;
-    return { index: this.index, name: this.L.name, time: this.run.time, deaths: this.run.deaths, life: this.run.life, lamps: ps.filter((k) => k.taken).length, lampsTotal: ps.length, medal: medal(this.L, this.run.time), par: this.L.par };
+    return { assist: this.run.assist, index: this.index, name: this.L.name, time: this.run.time, deaths: this.run.deaths, life: this.run.life, lamps: ps.filter((k) => k.taken).length, lampsTotal: ps.length, medal: medal(this.L, this.run.time), par: this.L.par };
   }
 
   won() {
     const pr = Game.progress();
     pr.unlocked = Math.max(pr.unlocked, Math.min(LEVELS.length - 1, this.index + 1));
     const prev = pr.best[this.index];
-    this.newBest = prev === undefined || this.run.time < prev;
+    // Assist runs don't set records.
+    this.newBest = !this.run.assist && (prev === undefined || this.run.time < prev);
     if (this.newBest) pr.best[this.index] = this.run.time;
-    pr.deaths[this.index] = this.run.deaths;
+    pr.deaths[this.index] = Math.min(pr.deaths[this.index] ?? Infinity, this.run.deaths);
+    // This playthrough, from level 1 to here.
+    pr.campaign = pr.campaign ?? { time: 0, deaths: 0, levels: 0, assist: false };
+    pr.campaign.time += this.run.time;
+    pr.campaign.deaths += this.run.deaths;
+    pr.campaign.levels += 1;
+    pr.campaign.assist ||= this.run.assist;
     const st = this.stats();
     pr.lamps = pr.lamps ?? {};
     pr.lamps[this.index] = Math.max(pr.lamps[this.index] ?? 0, st.lamps);
     pr.lampsTotal = pr.lampsTotal ?? {};
     pr.lampsTotal[this.index] = st.lampsTotal;
-    if (this.recording && (this.newBest || !this.ghostRun)) {
+    if (this.recording && !this.run.assist && (this.newBest || !this.ghostRun)) {
       try {
         localStorage.setItem(GHOST_KEY + this.index, JSON.stringify(this.recording));
       } catch {}
@@ -473,15 +486,24 @@ export class Game {
     }
   }
 
+  // Everything, for the final screen.
   totals() {
     const p = Game.progress();
-    let time = 0;
-    let deaths = 0;
-    for (let i = 0; i < LEVELS.length; i += 1) {
-      time += p.best[i] ?? 0;
-      deaths += p.deaths[i] ?? 0;
-    }
-    return { time, deaths };
+    const rows = LEVELS.map((L, i) => {
+      const best = p.best[i];
+      return { name: L.name, best, medal: best !== undefined ? medal(L, best) : null, lamps: p.lamps?.[i] ?? 0, lampsTotal: p.lampsTotal?.[i] ?? L.pickups.length };
+    });
+    const sum = (f) => rows.reduce((a, r) => a + f(r), 0);
+    return {
+      rows,
+      bestTotal: sum((r) => r.best ?? 0),
+      lamps: sum((r) => r.lamps),
+      lampsTotal: sum((r) => r.lampsTotal),
+      golds: rows.filter((r) => r.medal === "gold").length,
+      silvers: rows.filter((r) => r.medal === "silver").length,
+      bronzes: rows.filter((r) => r.medal === "bronze").length,
+      campaign: p.campaign ?? null,
+    };
   }
 
   // Over your shoulder, pulled in if something's in the way.
@@ -506,8 +528,8 @@ export class Game {
     this.curDist = this.curDist === undefined ? dist : dist < this.curDist ? dist : this.curDist + (dist - this.curDist) * Math.min(1, dt * 3);
     this.camera.position.copy(this.focus).addScaledVector(dir, this.curDist);
     this.camera.lookAt(this.focus.x, this.focus.y + 0.2, this.focus.z);
-    // Shake.
-    this.trauma = Math.max(0, this.trauma - dt * 1.6);
+    // Shake (a constant tremor while the world collapses).
+    this.trauma = Math.max(this.state === "play" && this.run.st.collapseT !== null ? 0.28 : 0, this.trauma - dt * 1.6);
     const k = this.trauma * this.trauma * 0.12;
     if (k > 0) {
       const t = this.time * 40;

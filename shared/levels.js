@@ -396,7 +396,7 @@ export const LEVELS = [
     },
   ),
   course(
-    { name: "Will of Fire", sub: "Flames go out. Fire does not.", life: 9, cpLife: 9, max: 11, palette: WILL, weather: "embers", can: { double: true, dash: true }, final: true, hint: "Climb to the Eternal Fire." },
+    { name: "Will of Fire", sub: "Flames go out. Fire does not.", life: 9, cpLife: 9, max: 11, palette: WILL, weather: "embers", can: { double: true, dash: true }, final: true, collapse: { delay: 3, every: 1.4 }, hint: "Climb to the Eternal Fire." },
     (c) => {
       c.go(2.0, 0.8, 2.2).diya();
       c.paper(2.2, 0.8, 2.0);
