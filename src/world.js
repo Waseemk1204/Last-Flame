@@ -195,6 +195,29 @@ function textures() {
     ctx.bezierCurveTo(w * 0.4, w * 0.62, w * 0.38, w * 0.45, w / 2, w * 0.3);
     ctx.stroke();
   });
+  TEX.cracks = canvasTex(
+    256,
+    256,
+    (ctx, w, h) => {
+      ctx.fillStyle = "#000";
+      ctx.fillRect(0, 0, w, h);
+      ctx.strokeStyle = "#ffb060";
+      ctx.lineWidth = 2;
+      for (let i = 0; i < 10; i += 1) {
+        let x = rand() * w;
+        let y = rand() * h;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        for (let k = 0; k < 7; k += 1) {
+          x += (rand() - 0.5) * 50;
+          y += (rand() - 0.5) * 50;
+          ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+      }
+    },
+    { repeat: true },
+  );
   TEX.beam = canvasTex(64, 256, (ctx, w, h) => {
     const g = ctx.createLinearGradient(0, 0, 0, h);
     g.addColorStop(0, "rgba(255,200,120,0)");
@@ -420,6 +443,7 @@ export class World {
     const rockMat = std({ color: new THREE.Color(P.stone).multiplyScalar(0.35), roughness: 1 });
     const runeMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(2.2, 1.2, 0.4), fog: false });
     const woodMat = std({ map: T.wood, roughness: 0.85 });
+    const crumbleMat = [stoneSide, stoneSide, std({ color: new THREE.Color(P.stone).multiplyScalar(0.75), map: T.stone, emissive: new THREE.Color(0.5, 0.12, 0.02), emissiveMap: T.cracks, roughness: 1 }), stoneSide, stoneSide, stoneSide];
     this.waterMat = std({ color: 0x5a8aa0, map: T.water, roughness: 0.15, metalness: 0.3, transparent: true, opacity: 0.88, emissive: 0x0a2030, emissiveIntensity: 0.6 });
 
     this.platViews = new Map();
@@ -480,9 +504,9 @@ export class World {
         v.mesh = m;
         v.ghost = ghost;
       } else {
-        // Stone (or a roof).
-        const roof = !d.route;
-        const m = new THREE.Mesh(boxGeo(d.w, d.h, d.d), roof ? woodMat : stone);
+        // Stone (or a roof). Crumbling stone is darker, with embers in its cracks.
+        const roof = d.roof;
+        const m = new THREE.Mesh(boxGeo(d.w, d.h, d.d), roof ? woodMat : d.crumble ? crumbleMat : stone);
         m.position.y = -d.h / 2;
         m.castShadow = m.receiveShadow = true;
         g.add(m);
@@ -582,6 +606,25 @@ export class World {
       this.beam = beam;
     }
     this.goalGroup = gg;
+
+    // Key prompts over the first gaps.
+    this.prompts = (L.prompts ?? []).map((pr) => {
+      const tex = canvasTex(512, 96, (ctx, w, h) => {
+        ctx.font = "600 38px Inter, system-ui, sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.shadowColor = "rgba(0,0,0,0.9)";
+        ctx.shadowBlur = 12;
+        ctx.fillStyle = "#ffe2b0";
+        ctx.fillText(pr.text, w / 2, h / 2);
+      });
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false, fog: false }));
+      sp.scale.set(3.4, 0.64, 1);
+      sp.position.set(pr.x, pr.y, pr.z);
+      sp.renderOrder = 5;
+      this.level.add(sp);
+      return { sp, y: pr.y };
+    });
 
     // Drops.
     const dropMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.9, 1.4, 2.2), fog: false });
@@ -683,7 +726,23 @@ export class World {
       const v = this.platViews.get(p.def.id);
       const d = p.def;
       v.group.position.set(p.x, p.y, p.z);
-      if (d.kind === "paper") {
+      if (d.crumble) {
+        if (p.alive) {
+          v.fall = 0;
+          v.fallV = 0;
+          v.group.rotation.set(0, 0, 0);
+          v.group.visible = true;
+          const k = (p.crumbleT ?? 0) / 0.9;
+          if (k > 0) v.group.position.x += Math.sin(t * 60) * 0.04 * k;
+        } else {
+          v.fallV += dt * 14;
+          v.fall += v.fallV * dt;
+          v.group.position.y -= v.fall;
+          v.group.rotation.x = v.fall * 0.08;
+          v.group.rotation.z = v.fall * 0.05;
+          v.group.visible = v.fall < 40;
+        }
+      } else if (d.kind === "paper") {
         v.mesh.visible = p.alive;
         const k = p.burning ? Math.min(1, p.burnT / 0.55) : Math.min(1, p.touch / 0.45) * 0.3;
         v.mat.color.setRGB(1 - k * 0.8, 1 - k * 0.85, 1 - k * 0.9);
@@ -737,6 +796,13 @@ export class World {
       const k = lit ? 1 : 0.3 + Math.sin(t * 2) * 0.15;
       c.ring.material.color.setRGB(1.6 * k, 0.9 * k, 0.4 * k);
       c.ring.rotation.z = t * 0.2;
+    }
+
+    // Prompts: there when you're near.
+    for (const pr of this.prompts) {
+      const d = pr.sp.position.distanceTo(focus);
+      pr.sp.material.opacity = Math.max(0, Math.min(1, (9 - d) / 3));
+      pr.sp.position.y = pr.y + Math.sin(t * 2) * 0.06;
     }
 
     // Goal.

@@ -40,6 +40,7 @@ export const PICKUPS = {
 
 export const PAPER = { fuse: 0.45, burn: 0.55, regrow: 5 }; // catches, burns away, grows back
 export const WAX = { melt: 0.55, regrow: 0.25, regrowDelay: 1.5 }; // metres per second
-export const BLINK = { warn: 0.6 }; // flickers this long before it vanishes
+export const BLINK = { warn: 0.6 };
+export const CRUMBLE = { fuse: 0.9 }; // stone that falls away after you touch it // flickers this long before it vanishes
 export const DRIP = { gravity: 18, radius: 0.5 };
 export const ABILITY_NAMES = { double: "Double jump", dash: "Dash" };

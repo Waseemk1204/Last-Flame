@@ -41,6 +41,15 @@ const ui = {
     const why = harsh ? (game.run?.inWind ? "wind" : "rain") : "";
     if ($("#life-why").textContent !== why) $("#life-why").textContent = why ? `${why} · burning faster` : "";
   },
+  run(t, par, lamps, total) {
+    const ts = fmt(t);
+    if ($("#run-t").textContent !== ts) $("#run-t").textContent = ts;
+    const ls = `${lamps} / ${total}`;
+    if ($("#run-l").textContent !== ls) $("#run-l").textContent = ls;
+    const m = t <= par[0] ? "gold" : t <= par[1] ? "silver" : "bronze";
+    const el = $("#run-medal");
+    if (!el.classList.contains(m)) el.className = `medal ${m}`;
+  },
   level(n, name, sub) {
     $("#lvl-n").textContent = `${n} / ${LEVELS.length}`;
     $("#lvl-name").textContent = name;
@@ -105,11 +114,11 @@ const input = {
   read() {
     const k = (a, b) => (keys.has(a) || keys.has(b) ? 1 : 0);
     const r = {
-      x: k("KeyD", "ArrowRight") - k("KeyA", "ArrowLeft"),
-      z: k("KeyW", "ArrowUp") - k("KeyS", "ArrowDown"),
+      x: Math.max(-1, Math.min(1, k("KeyD", "ArrowRight") - k("KeyA", "ArrowLeft") + pad.x)),
+      z: Math.max(-1, Math.min(1, k("KeyW", "ArrowUp") - k("KeyS", "ArrowDown") + pad.z)),
       jump: this.jump,
       dash: this.dash,
-      held: keys.has("Space"),
+      held: keys.has("Space") || pad.held,
     };
     this.jump = false;
     this.dash = false;
@@ -132,6 +141,35 @@ window.addEventListener("keydown", (e) => {
 });
 window.addEventListener("keyup", (e) => keys.delete(e.code));
 window.addEventListener("blur", () => keys.clear());
+
+// Gamepad: left stick moves, right stick looks, A jumps, B / X / RB dash,
+// Y back to checkpoint, Start pauses. A also takes you on from the
+// level-complete card.
+const pad = { x: 0, z: 0, held: false, prev: [] };
+function pollPad(dt) {
+  const gp = [...(navigator.getGamepads?.() ?? [])].find((p) => p && p.connected);
+  pad.x = pad.z = 0;
+  pad.held = false;
+  if (!gp) return;
+  const dz = (v) => (Math.abs(v) > 0.18 ? v : 0);
+  pad.x = dz(gp.axes[0] ?? 0);
+  pad.z = -dz(gp.axes[1] ?? 0);
+  const btn = (i) => !!gp.buttons[i]?.pressed;
+  const edge = (i) => btn(i) && !pad.prev[i];
+  pad.held = btn(0);
+  if (running) {
+    if (edge(0)) input.jump = true;
+    if (edge(1) || edge(2) || edge(5)) input.dash = true;
+    if (edge(3)) game.restartCheckpoint();
+    game.look(dz(gp.axes[2] ?? 0) * dt * 2.8, dz(gp.axes[3] ?? 0) * dt * 1.8 * (settings.invert ? -1 : 1));
+  }
+  if (edge(9)) {
+    if (running) pause();
+    else if (!$("#pause").classList.contains("hidden")) resume();
+  }
+  if (edge(0) && !$("#win").classList.contains("hidden")) next();
+  pad.prev = gp.buttons.map((b) => b.pressed);
+}
 
 // ------------------------------------------------------------------ setup
 const canvas = $("#game");
@@ -374,6 +412,7 @@ function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
   if (!$("#title").classList.contains("hidden")) drawTitleFlame(now);
+  pollPad(dt);
   if (running || game.state === "won" || game.state === "ending" || game.state === "showcase") {
     try {
       game.update(dt);

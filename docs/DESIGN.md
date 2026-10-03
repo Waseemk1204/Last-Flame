@@ -43,6 +43,7 @@ squashes when it lands, and it shrinks and reddens as your life runs down.
 | Drops | fall from the dark on a beat; a shadow darkens under each; −4 s |
 | Wind | gusts across your path; dust stirs before each one |
 | Rain | level 7: everywhere, except under the roofs |
+| Crumbling stone | levels 8–9: glowing cracks; falls 0.9 s after you touch it, back only when you respawn |
 
 ## Levels (shared/levels.js)
 
@@ -62,6 +63,15 @@ Difficulty: the bot's lowest life falls from about 11 s on level 1 to about
 3 s on levels 8 and 9, gaps widen, platforms shrink, and hazards stack.
 
 ## Replay and feel
+
+- **Bonus lamps**: every level has a lantern on a platform off the route.
+  The HUD counts lamps burned; the test proves each bonus platform can be
+  reached and left.
+- **Run timer** in the HUD, with a gold/silver/bronze dot for your pace.
+- **Key prompts** float over the first gaps that need jump, double jump
+  and dash.
+- **Gamepad**: left stick move, right stick look, A jump, B/X/RB dash,
+  Y back to checkpoint, Start pause.
 
 - **Par times**: gold and silver per level (about 1.3× and 1.8× the bot's
   time; the test checks gold stays possible). Medals and lamps burned show

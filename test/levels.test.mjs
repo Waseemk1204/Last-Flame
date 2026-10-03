@@ -37,6 +37,57 @@ test("there are nine levels, each with a checkpoint and a goal", () => {
   }
 });
 
+test("no two solid platforms overlap", () => {
+  for (const L of LEVELS) {
+    const solid = L.plats.filter((p) => p.kind !== "water" && !p.move);
+    for (let i = 0; i < solid.length; i += 1)
+      for (let j = i + 1; j < solid.length; j += 1) {
+        const a = solid[i];
+        const b = solid[j];
+        const ox = Math.abs(a.x - b.x) < (a.w + b.w) / 2 + 0.3;
+        const oz = Math.abs(a.z - b.z) < (a.d + b.d) / 2 + 0.3;
+        const oy = a.y - a.h < b.y + 1 && b.y - b.h < a.y + 1; // and 1 m of headroom
+        if (a.roof || b.roof) continue;
+        assert.ok(!(ox && oz && oy), `${L.name}: ${a.id} and ${b.id} overlap`);
+      }
+  }
+});
+
+test("every level has bonus lamps off the route", () => {
+  for (const L of LEVELS) assert.ok(L.pickups.some((p) => p.bonus), L.name);
+});
+
+test("every bonus platform can be reached, and left again", () => {
+  for (const L of LEVELS) {
+    const route = L.plats.filter((p) => p.route);
+    for (const bonus of L.plats.filter((p) => p.bonus)) {
+      // Its parent: the route platform it was built off (the nearest one before it).
+      const idx = L.plats.indexOf(bonus);
+      const parent = [...route].reverse().find((p) => L.plats.indexOf(p) < idx);
+      // Back onto the route: the parent if it lasts, else the next one.
+      const back = parent.kind === "paper" || parent.crumble || parent.kind === "wax" ? route[route.indexOf(parent) + 1] : parent;
+      for (const [from, to] of [[parent, bonus], [bonus, back]]) {
+        const run = new Run(L);
+        run.body.x = from.x;
+        run.body.y = from.y + 0.05;
+        run.body.z = from.z;
+        run.life = 30;
+        const bot = new Bot(run);
+        bot.route = [from, to];
+        let ok = false;
+        for (let t = 0; t < 12 && !run.dead; t += DT) {
+          run.tick(bot.input(run, DT), DT);
+          if (bot.i > 0) {
+            ok = true;
+            break;
+          }
+        }
+        assert.ok(ok, `${L.name}: ${from.id} -> ${to.id}`);
+      }
+    }
+  }
+});
+
 for (const [i, L] of LEVELS.entries()) {
   test(`${i + 1}. ${L.name} can be finished in time`, () => {
     const r = play(L, { log: true });

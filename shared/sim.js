@@ -3,7 +3,7 @@
 // checkpoint and the goal; and your life running down. Pure, so the tests
 // (and the bot) can play it exactly as the game does.
 
-import { MOVE, LIFE, PICKUPS, PAPER, WAX, BLINK, DRIP } from "./rules.js";
+import { MOVE, LIFE, PICKUPS, PAPER, WAX, BLINK, DRIP, CRUMBLE } from "./rules.js";
 import { makeBody, cloneBody, step, over } from "./physics.js";
 
 const H = MOVE.height;
@@ -41,7 +41,7 @@ export class LevelState {
 
   // Back to how it was when you reached your last checkpoint (or began).
   reset() {
-    for (const p of this.plats) Object.assign(p, { alive: true, touch: 0, burning: false, burnT: 0, regrowT: 0, melt: 0, idle: 0, fading: false });
+    for (const p of this.plats) Object.assign(p, { alive: true, touch: 0, burning: false, burnT: 0, regrowT: 0, melt: 0, idle: 0, fading: false, crumbleT: 0 });
     for (const p of this.pickups) p.taken = p.banked;
     for (const d of this.drips) d.hit = -1;
     this.place();
@@ -98,7 +98,15 @@ export class LevelState {
       const d = p.def;
       const on = body && body.grounded && body.ground === d.id;
       p.dmelt = 0;
-      if (d.kind === "paper") {
+      if (d.crumble) {
+        if (p.alive && (on || p.crumbleT > 0)) {
+          p.crumbleT = (p.crumbleT ?? 0) + dt;
+          if (p.crumbleT >= CRUMBLE.fuse) {
+            p.alive = false;
+            ev.push({ type: "crumble", plat: p });
+          }
+        }
+      } else if (d.kind === "paper") {
         if (p.alive) {
           if (on) p.touch += dt;
           if (!p.burning && p.touch >= PAPER.fuse) {

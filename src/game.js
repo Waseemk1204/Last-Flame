@@ -289,6 +289,12 @@ export class Game {
     this.world.update(dt, t, this.camera.position, this.player.root.position);
     const low = run.life < LIFE.low && this.state === "play";
     this.ui.life(Math.max(0, run.life), run.level.max, low, run.drain > 1);
+    if (this.state !== "showcase") {
+      const ps = run.st.pickups;
+      let n = 0;
+      for (const k of ps) if (k.taken) n += 1;
+      this.ui.run(run.time, this.L.par, n, ps.length);
+    }
     const near = this.L.final ? Math.max(0, 1 - Math.hypot(b.x - this.L.goal.x, b.z - this.L.goal.z, b.y - this.L.goal.y) / 25) : 0;
     this.sound.update(dt, { life01, playing: this.state === "play", wind: run.inWind ? 1 : 0, rain: this.L.rain ? (run.inRain ? 1 : 0.4) : 0, fire: this.state === "ending" ? 1 : near, low });
     this.sound.listen?.(this.camera.position.x, this.camera.position.y, this.camera.position.z, Math.sin(this.yaw), Math.cos(this.yaw));
@@ -361,6 +367,12 @@ export class Game {
         break;
       case "gone":
         s.gone();
+        break;
+      case "crumble":
+        if (Math.hypot(e.plat.x - this.run.body.x, e.plat.z - this.run.body.z) < 10) {
+          s.crumble();
+          this.trauma = Math.min(1, this.trauma + 0.2);
+        }
         break;
       case "blink":
         if (Math.hypot(e.plat.x - this.run.body.x, e.plat.z - this.run.body.z) < 12) s.blink();

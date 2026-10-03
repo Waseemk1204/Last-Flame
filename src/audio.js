@@ -121,6 +121,10 @@ export class Sound extends AudioEngine {
   gone() {
     this.burst({ duration: 0.4, gain: 0.05, freq: 1800, q: 0.5, slideTo: 500 });
   }
+  crumble() {
+    this.burst({ duration: 0.9, gain: 0.14, freq: 160, q: 0.6, type: "lowpass", slideTo: 60 });
+    for (let i = 0; i < 6; i += 1) this.burst({ duration: 0.06, gain: 0.04, freq: 900 + Math.random() * 900, q: 2, delay: Math.random() * 0.5 });
+  }
   blink() {
     this.tone({ freq: 1760, duration: 0.25, gain: 0.015, slideTo: 880 });
   }

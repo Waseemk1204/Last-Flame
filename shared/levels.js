@@ -14,15 +14,17 @@ class Course {
     this.cur = null;
     this.cpAt = null;
     this.goalAt = null;
+    this.prompts = [];
     this.at(0, 0, 0, 5, 5);
   }
 
   at(x, y, z, w, d, opt = {}) {
     const kind = opt.kind ?? "stone";
     const h = opt.h ?? { paper: 0.1, wax: 1.3, water: 0.3 }[kind] ?? 0.8;
-    const p = { id: `p${this.plats.length}`, x, y, z, w, d, h, kind, route: opt.route ?? kind !== "water", move: opt.move, blink: opt.blink };
+    const p = { id: `p${this.plats.length}`, x, y, z, w, d, h, kind, route: opt.route ?? kind !== "water", move: opt.move, blink: opt.blink, roof: !!opt.roof, crumble: !!opt.crumble, bonus: !!opt.bonus };
     this.plats.push(p);
     if (p.route) this.cur = p;
+    if (!p.roof && kind !== "water") this.target = p; // where lamps go
     this.last = p;
     return this;
   }
@@ -61,6 +63,30 @@ class Course {
     const [hx, hz] = this.dir;
     return this.go(gap, rise, size, { ...opt, move: { ax: [hx, 0, hz], amp, period, phase } });
   }
+  // Stone that falls away a moment after you touch it.
+  crumble(gap, rise, size, opt = {}) {
+    return this.go(gap, rise, size, { ...opt, crumble: true });
+  }
+
+  // A bonus platform off to the side of this one (side: +1 right, -1 left),
+  // `gap` metres past its side edge: off the route, for the lamps on it.
+  branch(gap, rise = 0, size = 1.8, side = 1, opt = {}) {
+    const c = this.cur;
+    const [hx, hz] = this.dir;
+    const half = (hx ? c.d : c.w) / 2;
+    const dist = half + gap + size / 2;
+    return this.at(c.x + hz * dist * side, c.y + rise, c.z - hx * dist * side, size, size, { ...opt, route: false, bonus: true });
+  }
+
+  // A key prompt floating over the gap after this platform.
+  prompt(text) {
+    const c = this.cur;
+    const [hx, hz] = this.dir;
+    const e = (hx ? c.w : c.d) / 2 + 1.2;
+    this.prompts.push({ text, x: c.x + hx * e, y: c.y + 1.9, z: c.z + hz * e });
+    return this;
+  }
+
   // There for `on` seconds, gone for `off`.
   blink(gap, rise, size, on, off, phase = 0, opt = {}) {
     return this.go(gap, rise, size, { ...opt, blink: { on, off, phase } });
@@ -81,7 +107,7 @@ class Course {
   }
 
   pick(type, ox = 0, oz = 0) {
-    this.pickups.push({ type, on: this.cur.id, ox, oz });
+    this.pickups.push({ type, on: this.target.id, ox, oz, bonus: this.target.bonus });
     return this;
   }
   diya(ox, oz) {
@@ -130,7 +156,7 @@ class Course {
   // A roof over this platform, `height` above it: shelter from rain.
   roof(height = 3, extra = 0.6) {
     const c = this.cur;
-    this.at(c.x, c.y + height + 0.3, c.z, c.w + extra, c.d + extra, { route: false, h: 0.3 });
+    this.at(c.x, c.y + height + 0.3, c.z, c.w + extra, c.d + extra, { route: false, h: 0.3, roof: true });
     return this;
   }
 
@@ -157,6 +183,7 @@ class Course {
       pickups: this.pickups,
       drips: this.drips,
       winds: this.winds,
+      prompts: this.prompts,
       cp: this.cpAt,
       goal: this.goalAt,
       killY,
@@ -182,11 +209,13 @@ export const LEVELS = [
   course(
     { name: "Kindling", sub: "Every flame starts small.", life: 12, cpLife: 12, max: 18, palette: DUSK, hint: "WASD to move, Space to jump. Run through lamps to take their flame: they give you time." },
     (c) => {
+      c.prompt("Space · jump");
       c.go(1.2, 0, 3).diya();
       c.go(1.5, 0, 3);
       c.go(1.8, 0.6, 2.6).diya(0.5, 0);
       c.go(1.8, 0.6, 2.6);
       c.go(2.0, 0, 2.6).candle();
+      c.branch(2.0, 0.6, 1.8, -1).lantern();
       c.turn("e").go(2.0, 0, 2.6);
       c.go(2.2, -0.6, 2.4).diya();
       c.go(2.2, 0, 2.4);
@@ -205,13 +234,14 @@ export const LEVELS = [
     { name: "Updraft", sub: "Burn a little brighter to climb.", life: 10, cpLife: 10, max: 16, palette: DUSK, can: { double: true }, hint: "Jump again in the air to double-jump. It burns a second of your life.", unlock: "double" },
     (c) => {
       c.go(1.6, 0, 3).diya();
-      c.go(2.0, 1.2, 2.6);
+      c.go(2.0, 1.2, 2.6).prompt("Space in the air · double jump");
       c.go(5.2, 0, 2.6).candle(); // too far for one jump
       c.go(1.6, 2.4, 2.4); // too high for one jump
       c.go(2.4, 0.6, 2.2).diya();
       c.turn("e").go(5.4, -0.5, 2.4);
       c.go(2.0, 2.2, 2.4).candle();
       c.go(3, 0, 4).cp();
+      c.branch(3.0, 1.5, 1.6, -1).lantern();
       c.go(5.6, 0, 2.2).diya();
       c.turn("n").go(1.4, 2.5, 2.2);
       c.go(1.4, 2.5, 2.2).candle();
@@ -229,8 +259,9 @@ export const LEVELS = [
       c.paper(1.6, 0, 2.2);
       c.paper(1.6, 0, 2.2).diya();
       c.paper(1.8, 0, 2.2);
-      c.go(1.8, 0.6, 2.6).candle();
+      c.go(1.8, 0.6, 2.6).candle().prompt("Jump, jump again, then Shift · dash");
       c.go(7.4, 0, 2.6); // needs a dash
+      c.branch(4.0, 0, 1.6, 1).lantern();
       c.paper(1.8, 0, 2);
       c.paper(1.8, 0.4, 2).diya();
       c.paper(1.8, 0.4, 2);
@@ -258,6 +289,7 @@ export const LEVELS = [
       c.wax(2.2, 0.5, 2.2);
       c.wax(2.2, 0.5, 2.2).diya();
       c.go(2.4, 0, 4).cp();
+      c.branch(3.0, 0.5, 1.6, -1).lantern();
       c.turn("e").lift(2.6, 1, 2.4, 1.4, 3.5).diya();
       c.go(2.6, 1.2, 2.4);
       c.slide(2.2, 0, 2.2, 1.6, 3.2).candle();
@@ -279,6 +311,7 @@ export const LEVELS = [
       c.blink(2.4, 0, 2.4, 2.4, 1.6, 0.25);
       c.go(2.4, 0, 3).diya();
       c.water(3).go(3, 0, 4).cp().drip(1, 1, 2.5, 0.1).drip(-1, -1, 2.5, 0.6);
+      c.branch(3.2, 0, 1.6, -1).lantern();
       c.turn("e").blink(2.6, 0, 2.2, 2.2, 1.6).diya();
       c.water(2.8).go(2.8, 0.4, 2.2).drip(0, 0, 1.6, 0.3);
       c.blink(2.6, 0, 2.2, 2.0, 1.6, 0.4).candle();
@@ -299,6 +332,7 @@ export const LEVELS = [
       c.go(2.6, 0, 2.4);
       c.go(2.6, 0.5, 2.2).candle();
       c.go(2.4, 0, 4).cp();
+      c.branch(3.4, 0.6, 1.6, -1).lantern();
       c.turn("e").wind(18, -1, 18, 3.6, 1.6, 0.3);
       c.paper(2.4, 0, 2.2).diya();
       c.go(2.6, 0.6, 2.2);
@@ -323,6 +357,7 @@ export const LEVELS = [
       c.sway(2.6, 0.4, 2.2, 2, 3.8).diya();
       c.go(2.6, 0, 2.4).drip(0, 0, 1.6, 0.2);
       c.go(2.4, 0, 4).roof().cp();
+      c.branch(3.0, 0.5, 1.6, 1).lantern();
       c.turn("w").blink(2.6, 0.5, 2.2, 2.0, 1.4).diya();
       c.paper(2.4, 0, 2);
       c.paper(2.4, 0.5, 2).diya();
@@ -341,21 +376,22 @@ export const LEVELS = [
       c.blink(2.4, 0.5, 2.0, 1.6, 1.2);
       c.paper(2.4, 0, 2.0).diya();
       c.sway(2.6, 0.5, 2.0, 2.4, 3.0);
-      c.go(5.6, 0, 2.2).candle();
+      c.crumble(5.6, 0, 2.2).candle();
       c.wax(2.4, 0.6, 2.0);
       c.wind(12, -1, 18, 3.4, 1.6);
       c.paper(2.6, 0, 2.0).diya();
       c.blink(2.8, 0.5, 2.0, 1.5, 1.2, 0.3);
       c.go(2.8, 0, 3.2).cp();
+      c.branch(2.8, 0.8, 1.6, -1).lantern();
       c.turn("e").slide(2.6, 0.6, 2.0, 1.8, 2.8).diya();
       c.paper(2.6, 0, 1.8);
-      c.go(7.0, 1.0, 2.0).candle();
+      c.crumble(7.0, 1.0, 2.0).candle();
       c.drip(0, 0, 1.3, 0.5);
       c.turn("n").blink(2.8, 0.5, 1.8, 1.4, 1.2).diya();
       c.wax(2.8, 0.5, 1.8);
       c.sway(2.8, 0, 1.8, 2.6, 2.8).diya();
       c.paper(2.8, 0.5, 1.8);
-      c.go(6.8, 0.5, 2.0).diya();
+      c.crumble(6.8, 0.5, 2.0).diya();
       c.go(2.8, 0, 5).goal();
     },
   ),
@@ -364,7 +400,7 @@ export const LEVELS = [
     (c) => {
       c.go(2.0, 0.8, 2.2).diya();
       c.paper(2.2, 0.8, 2.0);
-      c.go(2.4, 0.8, 2.0).diya();
+      c.crumble(2.4, 0.8, 2.0).diya();
       c.turn("e").blink(2.4, 1.0, 2.0, 1.6, 1.2);
       c.wax(2.4, 1.0, 2.0).candle();
       c.lift(2.6, 1.2, 2.0, 1.2, 3.0);
@@ -372,6 +408,7 @@ export const LEVELS = [
       c.sway(2.6, 0.8, 1.8, 2.2, 2.8);
       c.paper(2.6, 0.8, 1.8).diya();
       c.go(2.6, 0.8, 3).cp();
+      c.branch(3.0, 1.2, 1.4, -1).lantern();
       c.turn("w").wind(12, 1, 18, 3.2, 1.6);
       c.paper(2.6, 0.8, 1.8).diya();
       c.blink(2.6, 1.0, 1.8, 1.4, 1.2, 0.2);
@@ -379,7 +416,7 @@ export const LEVELS = [
       c.turn("n").wax(2.6, 1.0, 1.8);
       c.slide(2.6, 1.0, 1.8, 1.6, 2.6).diya();
       c.paper(2.6, 1.0, 1.6);
-      c.go(1.6, 2.6, 1.8).diya();
+      c.crumble(1.6, 2.6, 1.8).diya();
       c.turn("e").blink(2.8, 0.8, 1.6, 1.3, 1.1);
       c.go(2.4, 1.0, 6).goal();
     },
