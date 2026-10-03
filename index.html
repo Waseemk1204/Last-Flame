@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#05060c" />
+    <meta name="description" content="Last Flame: you are a flame on Diwali night. Every body you burn in dies. Leap from match to diya to sparkler, climb the neighbourhood, and light the temple lamp." />
+    <title>Last Flame</title>
+    <link rel="icon" href="./assets/icon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Inter:wght@400;500&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./src/styles.css" />
+  </head>
+  <body>
+    <main id="app">
+      <canvas id="game" aria-label="Game view"></canvas>
+
+      <div id="hud" class="hud hidden">
+        <div class="aim">
+          <svg viewBox="0 0 60 60" aria-hidden="true">
+            <circle class="track" cx="30" cy="30" r="24" />
+            <circle id="fuel" class="fuel" cx="30" cy="30" r="24" />
+          </svg>
+          <div class="dot"></div>
+        </div>
+        <div id="target" class="target"></div>
+        <div id="lamps" class="lamps"><span class="lamp-icon"></span><b id="lamp-n">0</b> / <span id="lamp-t">0</span></div>
+        <div id="section" class="section"><h2></h2><p></p></div>
+        <div id="hint" class="hint"></div>
+        <div id="toast" class="toast"></div>
+      </div>
+
+      <section id="title" class="screen title">
+        <div class="title-body">
+          <canvas id="title-flame" width="160" height="240" aria-hidden="true"></canvas>
+          <h1>LAST FLAME</h1>
+          <p class="tagline">You can't stay. You can only pass the light on.</p>
+          <nav class="menu">
+            <button id="btn-start" class="btn" type="button">Begin</button>
+            <button id="btn-continue" class="btn hidden" type="button">Continue</button>
+            <button id="btn-settings" class="btn ghost" type="button">Settings</button>
+          </nav>
+          <p class="how">Mouse to look · Click or Space to leap · Esc to pause</p>
+        </div>
+      </section>
+
+      <section id="intro" class="screen intro hidden">
+        <p class="intro-line" data-i="0">Diwali night.</p>
+        <p class="intro-line" data-i="1">The storm blew out every lamp in the galli, and the power is gone.</p>
+        <p class="intro-line" data-i="2">On her doorstep, Munni strikes the last match in the box.</p>
+        <p class="intro-line" data-i="3">You are that flame.</p>
+      </section>
+
+      <section id="settings" class="screen settings hidden">
+        <div class="panel">
+          <h2>Settings</h2>
+          <label>Mouse sensitivity <input id="set-sens" type="range" min="0.0008" max="0.005" step="0.0001" /></label>
+          <label>Volume <input id="set-vol" type="range" min="0" max="1" step="0.01" /></label>
+          <label>Graphics
+            <select id="set-quality">
+              <option value="high">High</option>
+              <option value="low">Low (older laptops)</option>
+            </select>
+          </label>
+          <button id="btn-settings-back" class="btn" type="button">Back</button>
+          <p class="credits">
+            LAST FLAME — made for BYOG 2026 (theme: Everything is Temporary).<br />
+            Built on <a href="https://threejs.org" target="_blank" rel="noopener">three.js</a> (MIT licence). Fonts: Cormorant Garamond and Inter (SIL Open Font Licence), via Google Fonts.<br />
+            Every model, texture and sound is made in code for this game. Made with the help of an AI coding assistant.
+          </p>
+        </div>
+      </section>
+
+      <section id="pause" class="screen pause hidden">
+        <div class="panel">
+          <h2>Paused</h2>
+          <nav class="menu">
+            <button id="btn-resume" class="btn" type="button">Resume</button>
+            <button id="btn-restart-cp" class="btn ghost" type="button">Back to checkpoint</button>
+            <button id="btn-pause-settings" class="btn ghost" type="button">Settings</button>
+            <button id="btn-quit" class="btn ghost" type="button">Title</button>
+          </nav>
+        </div>
+      </section>
+
+      <section id="end" class="screen end hidden">
+        <div class="panel end-body">
+          <p class="end-big"><span id="end-lamps">0</span> lamps lit, of <span id="end-total">0</span>.</p>
+          <p class="end-line">Every one of them was out by morning.</p>
+          <p class="end-line">They were beautiful while they lasted.</p>
+          <p id="end-stats" class="end-stats"></p>
+          <nav class="menu">
+            <button id="btn-again" class="btn" type="button">Light it again</button>
+          </nav>
+        </div>
+      </section>
+
+      <div id="fade" class="fade"></div>
+    </main>
+    <script type="importmap">
+      { "imports": { "three": "./assets/vendor/three.module.min.js" } }
+    </script>
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>

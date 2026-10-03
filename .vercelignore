@@ -1,0 +1,6 @@
+# Not part of the site
+.claude/
+dist/
+docs/
+test/
+server.mjs
