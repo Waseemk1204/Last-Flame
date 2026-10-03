@@ -1,10 +1,11 @@
-// The neighbourhood on Diwali night, after the storm: pastel houses with dark
-// windows, parapets and water tanks on the roofs, saris on the clotheslines,
-// dead strings of fairy lights, Munni's rangoli, the hill and the temple, a
-// deep blue sky, and the rest of the city celebrating far away.
+// The world a level is made of: stone islands floating over a sea of mist
+// at the end of the day; paper that burns, wax that melts, glass that comes
+// and goes; water, drops, wind, rain, ash; lamps to burn; the checkpoint
+// braziers; the goal; and for the last level, the Eternal Fire.
 
 import * as THREE from "three";
-import { BUILDINGS, HILL } from "../shared/level.js";
+import { flameGeometry, flameMaterial, glowSprite, Sparks } from "./player.js";
+import { pickupPos } from "../shared/sim.js";
 
 let seed = 2026;
 export function rand() {
@@ -24,642 +25,822 @@ export function canvasTex(w, h, draw, { repeat = false, srgb = true } = {}) {
   return t;
 }
 
-const hex = (c) => `#${c.toString(16).padStart(6, "0")}`;
-
-// A wall: plaster in a colour, stains, and a grid of shuttered windows.
-// Returns the colour map and a matching glow map: the windows that will
-// light up when the street comes back to life.
-function wallTextures(color, floors, bays) {
-  const glowCanvas = document.createElement("canvas");
-  glowCanvas.width = glowCanvas.height = 256;
-  const gctx = glowCanvas.getContext("2d");
-  gctx.fillStyle = "#000";
-  gctx.fillRect(0, 0, 256, 256);
-  const map = canvasTex(256, 256, (ctx, w, h) => {
-    ctx.fillStyle = hex(color);
-    ctx.fillRect(0, 0, w, h);
-    for (let i = 0; i < 1800; i += 1) {
-      ctx.fillStyle = rand() < 0.5 ? "rgba(0,0,0,0.05)" : "rgba(255,255,255,0.05)";
-      ctx.fillRect(rand() * w, rand() * h, 2, 2);
-    }
-    // Monsoon streaks from the top.
-    for (let i = 0; i < 14; i += 1) {
-      const x = rand() * w;
-      const g = ctx.createLinearGradient(0, 0, 0, h * (0.3 + rand() * 0.5));
-      g.addColorStop(0, "rgba(40,40,30,0.25)");
-      g.addColorStop(1, "rgba(40,40,30,0)");
-      ctx.fillStyle = g;
-      ctx.fillRect(x, 0, 3 + rand() * 6, h);
-    }
-    const fh = h / floors;
-    const bw = w / bays;
-    for (let f = 0; f < floors; f += 1) {
-      for (let b = 0; b < bays; b += 1) {
-        const x = b * bw + bw * 0.25;
-        const y = f * fh + fh * 0.22;
-        const ww = bw * 0.5;
-        const wh = fh * 0.52;
-        ctx.fillStyle = "#1a1d26";
-        ctx.fillRect(x, y, ww, wh);
-        const open = rand() < 0.6;
-        ctx.fillStyle = ["#2f5d62", "#7a3b2e", "#3a4f7a", "#5e6b3a"][(f + b) % 4];
-        if (open) {
-          ctx.fillRect(x - ww * 0.32, y, ww * 0.3, wh);
-          ctx.fillRect(x + ww * 1.02, y, ww * 0.3, wh);
-          // This window can glow: warm lamp light behind the grille.
-          if (rand() < 0.75) {
-            const gg = gctx.createRadialGradient(x + ww / 2, y + wh * 0.6, 2, x + ww / 2, y + wh * 0.6, ww * 0.9);
-            gg.addColorStop(0, "#ffd08a");
-            gg.addColorStop(1, "#a0480c");
-            gctx.fillStyle = gg;
-            gctx.fillRect(x, y, ww, wh);
-          }
-        } else ctx.fillRect(x, y, ww, wh);
-        ctx.strokeStyle = "rgba(20,20,20,0.6)";
-        gctx.strokeStyle = "#000";
-        for (let k = 1; k < 4; k += 1) {
-          for (const c of [ctx, gctx]) {
-            c.beginPath();
-            c.moveTo(x + (k * ww) / 4, y);
-            c.lineTo(x + (k * ww) / 4, y + wh);
-            c.stroke();
+// ------------------------------------------------------------- textures
+const TEX = {};
+function textures() {
+  if (TEX.stone) return TEX;
+  TEX.stone = canvasTex(
+    256,
+    256,
+    (ctx, w, h) => {
+      ctx.fillStyle = "#8a8480";
+      ctx.fillRect(0, 0, w, h);
+      for (let i = 0; i < 2600; i += 1) {
+        const v = 100 + Math.floor(rand() * 70);
+        ctx.fillStyle = `rgba(${v},${v - 4},${v - 10},${0.25 + rand() * 0.3})`;
+        ctx.fillRect(rand() * w, rand() * h, 1 + rand() * 4, 1 + rand() * 4);
+      }
+      // Blocks.
+      ctx.strokeStyle = "rgba(30,26,24,0.55)";
+      ctx.lineWidth = 2;
+      for (let y = 0; y <= h; y += 64) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(w, y);
+        ctx.stroke();
+        for (let x = (y / 64) % 2 ? 0 : 64; x <= w; x += 128) {
+          ctx.beginPath();
+          ctx.moveTo(x, y);
+          ctx.lineTo(x, y + 64);
+          ctx.stroke();
+        }
+      }
+      // Cracks.
+      ctx.strokeStyle = "rgba(20,18,16,0.5)";
+      ctx.lineWidth = 1;
+      for (let i = 0; i < 14; i += 1) {
+        let x = rand() * w;
+        let y = rand() * h;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        for (let k = 0; k < 5; k += 1) {
+          x += (rand() - 0.5) * 30;
+          y += (rand() - 0.5) * 30;
+          ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+      }
+    },
+    { repeat: true },
+  );
+  TEX.paper = canvasTex(
+    256,
+    256,
+    (ctx, w, h) => {
+      ctx.fillStyle = "#e8dcc0";
+      ctx.fillRect(0, 0, w, h);
+      for (let i = 0; i < 900; i += 1) {
+        ctx.strokeStyle = `rgba(150,130,100,${rand() * 0.15})`;
+        ctx.beginPath();
+        const x = rand() * w;
+        const y = rand() * h;
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + (rand() - 0.5) * 20, y + (rand() - 0.5) * 6);
+        ctx.stroke();
+      }
+      // Faded writing.
+      ctx.strokeStyle = "rgba(60,40,30,0.35)";
+      ctx.lineWidth = 2;
+      for (let row = 30; row < h - 20; row += 26) {
+        let x = 24;
+        ctx.beginPath();
+        ctx.moveTo(x, row);
+        while (x < w - 30) {
+          x += 4 + rand() * 8;
+          ctx.lineTo(x, row + (rand() - 0.5) * 8);
+          if (rand() < 0.12) {
+            x += 10;
+            ctx.moveTo(x, row);
           }
         }
-        ctx.fillStyle = "rgba(0,0,0,0.25)";
-        ctx.fillRect(x - 6, y - 6, ww + 12, 5);
+        ctx.stroke();
       }
-    }
-  });
-  const glow = new THREE.CanvasTexture(glowCanvas);
-  glow.colorSpace = THREE.SRGBColorSpace;
-  return { map, glow };
-}
-
-function rangoliTexture() {
-  return canvasTex(512, 512, (ctx, w, h) => {
-    ctx.clearRect(0, 0, w, h);
-    const c = w / 2;
-    const cols = ["#e8452c", "#f2b628", "#2aa0a8", "#e85c9a", "#ffffff", "#7b3fb8"];
-    for (let ring = 6; ring >= 1; ring -= 1) {
-      const r = ring * 38;
-      const petals = 8 + ring * 2;
-      ctx.fillStyle = cols[ring % cols.length];
-      for (let p = 0; p < petals; p += 1) {
-        const a = (p / petals) * Math.PI * 2;
-        ctx.beginPath();
-        ctx.ellipse(c + Math.cos(a) * r * 0.8, c + Math.sin(a) * r * 0.8, r * 0.28, r * 0.12, a, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      ctx.strokeStyle = "rgba(255,255,255,0.8)";
-      ctx.lineWidth = 3;
+      ctx.strokeStyle = "rgba(120,100,80,0.35)";
       ctx.beginPath();
-      ctx.arc(c, c, r * 0.55, 0, Math.PI * 2);
+      ctx.moveTo(w / 2, 0);
+      ctx.lineTo(w / 2, h);
       ctx.stroke();
-    }
-    // Dots round the edge.
-    ctx.fillStyle = "#fff";
-    for (let i = 0; i < 48; i += 1) {
-      const a = (i / 48) * Math.PI * 2;
+    },
+    { repeat: true },
+  );
+  TEX.wax = canvasTex(128, 256, (ctx, w, h) => {
+    const g = ctx.createLinearGradient(0, 0, 0, h);
+    g.addColorStop(0, "#fff4dc");
+    g.addColorStop(1, "#d8c8a0");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, w, h);
+    for (let i = 0; i < 12; i += 1) {
+      const x = rand() * w;
+      const len = 30 + rand() * 120;
+      ctx.fillStyle = "rgba(255,250,235,0.6)";
+      ctx.fillRect(x, 0, 5 + rand() * 6, len);
       ctx.beginPath();
-      ctx.arc(c + Math.cos(a) * 240, c + Math.sin(a) * 240, 4, 0, Math.PI * 2);
+      ctx.arc(x + 5, len, 5, 0, Math.PI * 2);
       ctx.fill();
     }
   });
+  TEX.wood = canvasTex(
+    256,
+    256,
+    (ctx, w, h) => {
+      ctx.fillStyle = "#4a3222";
+      ctx.fillRect(0, 0, w, h);
+      for (let y = 0; y < h; y += 32) {
+        ctx.fillStyle = `rgba(${70 + rand() * 30},${45 + rand() * 20},28,1)`;
+        ctx.fillRect(0, y + 1, w, 30);
+        ctx.strokeStyle = "rgba(20,12,8,0.4)";
+        for (let i = 0; i < 6; i += 1) {
+          ctx.beginPath();
+          ctx.moveTo(0, y + 4 + rand() * 24);
+          ctx.bezierCurveTo(w / 3, y + rand() * 32, (2 * w) / 3, y + rand() * 32, w, y + 4 + rand() * 24);
+          ctx.stroke();
+        }
+      }
+    },
+    { repeat: true },
+  );
+  TEX.water = canvasTex(
+    256,
+    256,
+    (ctx, w, h) => {
+      ctx.fillStyle = "#0c2a38";
+      ctx.fillRect(0, 0, w, h);
+      for (let i = 0; i < 60; i += 1) {
+        ctx.strokeStyle = `rgba(140,200,230,${0.08 + rand() * 0.15})`;
+        ctx.lineWidth = 1 + rand() * 2;
+        ctx.beginPath();
+        ctx.ellipse(rand() * w, rand() * h, 10 + rand() * 30, 3 + rand() * 6, 0, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    },
+    { repeat: true },
+  );
+  TEX.rune = canvasTex(256, 256, (ctx, w) => {
+    ctx.strokeStyle = "rgba(255,200,120,1)";
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.arc(w / 2, w / 2, w * 0.44, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(w / 2, w / 2, w * 0.36, 0, Math.PI * 2);
+    ctx.stroke();
+    for (let i = 0; i < 12; i += 1) {
+      const a = (i / 12) * Math.PI * 2;
+      ctx.save();
+      ctx.translate(w / 2 + Math.cos(a) * w * 0.4, w / 2 + Math.sin(a) * w * 0.4);
+      ctx.rotate(a);
+      ctx.beginPath();
+      ctx.moveTo(-6, -6);
+      ctx.lineTo(0, 6);
+      ctx.lineTo(6, -6);
+      ctx.stroke();
+      ctx.restore();
+    }
+    // A flame mark in the middle.
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(w / 2, w * 0.3);
+    ctx.bezierCurveTo(w * 0.62, w * 0.45, w * 0.6, w * 0.62, w / 2, w * 0.66);
+    ctx.bezierCurveTo(w * 0.4, w * 0.62, w * 0.38, w * 0.45, w / 2, w * 0.3);
+    ctx.stroke();
+  });
+  TEX.beam = canvasTex(64, 256, (ctx, w, h) => {
+    const g = ctx.createLinearGradient(0, 0, 0, h);
+    g.addColorStop(0, "rgba(255,200,120,0)");
+    g.addColorStop(1, "rgba(255,200,120,1)");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, w, h);
+  });
+  return TEX;
 }
 
-function mat(color, o = {}) {
-  return new THREE.MeshStandardMaterial({ color, roughness: o.r ?? 0.9, metalness: o.m ?? 0, ...(o.map ? { map: o.map } : {}), ...(o.emissive ? { emissive: o.emissive, emissiveIntensity: o.ei ?? 1 } : {}), side: o.side ?? THREE.FrontSide, transparent: !!o.transparent, opacity: o.opacity ?? 1 });
+// A box whose texture is scaled to its size (so big stones aren't stretched).
+function boxGeo(w, h, d, s = 2) {
+  const g = new THREE.BoxGeometry(w, h, d);
+  const uv = g.attributes.uv;
+  const dims = [
+    [d, h],
+    [d, h],
+    [w, d],
+    [w, d],
+    [w, h],
+    [w, h],
+  ];
+  for (let f = 0; f < 6; f += 1)
+    for (let k = 0; k < 4; k += 1) {
+      const i = f * 4 + k;
+      uv.setXY(i, uv.getX(i) * (dims[f][0] / s), uv.getY(i) * (dims[f][1] / s));
+    }
+  return g;
 }
 
-function box(parent, m, x, y, z, w, h, d, { shadow = true } = {}) {
-  const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
-  mesh.position.set(x, y, z);
-  mesh.castShadow = shadow;
-  mesh.receiveShadow = true;
-  parent.add(mesh);
-  return mesh;
+const std = (o) => new THREE.MeshStandardMaterial(o);
+const SMALL_GEO = flameGeometry(0.38, 16);
+
+// A small flame for lamps: the flame shader and a glow.
+export class SmallFlame {
+  constructor(parent, size = 0.2, glow = 0.9) {
+    this.object = new THREE.Group();
+    this.mesh = new THREE.Mesh(SMALL_GEO, flameMaterial({ alpha: 0.95 }));
+    this.glow = glowSprite(glow);
+    this.glow.position.y = size * 0.5;
+    this.object.add(this.mesh, this.glow);
+    parent.add(this.object);
+    this.size = size;
+    this.base = glow;
+    this.update(0);
+  }
+  update(t, k = 1) {
+    this.mesh.material.uniforms.uTime.value = t;
+    const f = 0.9 + Math.sin(t * 17 + this.size * 40) * 0.05 + Math.random() * 0.06;
+    const s = this.size * k * f;
+    this.mesh.scale.set(s * 0.8, s, s * 0.8);
+    this.glow.scale.setScalar(this.base * k * f);
+  }
+  set visible(v) {
+    this.object.visible = v;
+  }
 }
 
 export class World {
   constructor(scene) {
     this.scene = scene;
-    this.group = new THREE.Group();
-    scene.add(this.group);
-    this.houses = [];
-    this.sky(scene);
-    this.ground();
-    for (const b of BUILDINGS) this.building(b);
-    this.courtyard();
-    this.munni();
-    this.hill();
-    this.wires();
-    this.city();
-    this.fireworks = new Fireworks(scene);
-    this.lights(scene);
+    textures();
+    this.sky();
+    this.background();
+    this.lights();
+    this.level = new THREE.Group();
+    scene.add(this.level);
+    this.splash = new Sparks(scene, 120, [0.8, 1.4, 2.2]);
+    this.ash = new Sparks(scene, 200, [3, 1.2, 0.3]); // paper burning away
+    this.weatherFx();
+    this.poolLights = [];
+    for (let i = 0; i < 4; i += 1) {
+      const l = new THREE.PointLight(0xff9a40, 0, 8, 1.6);
+      scene.add(l);
+      this.poolLights.push(l);
+    }
   }
 
   // ---------------------------------------------------------------- sky
-  sky(scene) {
-    const geo = new THREE.SphereGeometry(400, 32, 16);
+  sky() {
     const m = new THREE.ShaderMaterial({
       side: THREE.BackSide,
       depthWrite: false,
       fog: false,
-      uniforms: {},
+      uniforms: { uTop: { value: new THREE.Color() }, uMid: { value: new THREE.Color() }, uLow: { value: new THREE.Color() } },
       vertexShader: `varying vec3 vP; void main(){ vP = normalize(position); gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(position,1.0); }`,
-      fragmentShader: `varying vec3 vP;
+      fragmentShader: `varying vec3 vP; uniform vec3 uTop; uniform vec3 uMid; uniform vec3 uLow;
         void main(){
-          float h = clamp(vP.y, -0.2, 1.0);
-          vec3 top = vec3(0.012, 0.02, 0.06);
-          vec3 mid = vec3(0.05, 0.06, 0.16);
-          vec3 low = vec3(0.16, 0.09, 0.12); // the city's glow on the clouds
-          vec3 c = mix(low, mid, smoothstep(-0.05, 0.18, h));
-          c = mix(c, top, smoothstep(0.18, 0.8, h));
+          float h = vP.y;
+          vec3 c = mix(uLow, uMid, smoothstep(-0.25, 0.15, h));
+          c = mix(c, uTop, smoothstep(0.15, 0.75, h));
           gl_FragColor = vec4(c, 1.0);
         }`,
     });
-    scene.add(new THREE.Mesh(geo, m));
-    // Stars.
-    const n = 900;
+    this.skyMat = m;
+    this.skyDome = new THREE.Mesh(new THREE.SphereGeometry(450, 32, 16), m);
+    this.scene.add(this.skyDome);
+    const n = 1200;
     const p = new Float32Array(n * 3);
     for (let i = 0; i < n; i += 1) {
       const a = rand() * Math.PI * 2;
-      const e = 0.15 + rand() * 1.3;
-      p.set([Math.cos(a) * Math.cos(e) * 380, Math.sin(e) * 380, Math.sin(a) * Math.cos(e) * 380], i * 3);
+      const e = 0.08 + rand() * 1.4;
+      p.set([Math.cos(a) * Math.cos(e) * 420, Math.sin(e) * 420, Math.sin(a) * Math.cos(e) * 420], i * 3);
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute("position", new THREE.BufferAttribute(p, 3));
-    scene.add(new THREE.Points(g, new THREE.PointsMaterial({ color: 0xa8b4d8, size: 1.1, sizeAttenuation: false, fog: false })));
-    // The moon, behind thin cloud.
-    const moon = new THREE.Mesh(new THREE.CircleGeometry(9, 32), new THREE.MeshBasicMaterial({ color: 0xf2ead2, fog: false }));
-    moon.position.set(-120, 150, 260);
-    moon.lookAt(0, 0, 0);
-    moon.material.color.multiplyScalar(1.6);
-    scene.add(moon);
-    // Clouds: soft dark sprites.
-    const cloudTex = canvasTex(256, 128, (ctx, w, h) => {
-      for (let i = 0; i < 30; i += 1) {
-        const x = w * (0.15 + rand() * 0.7);
-        const y = h * (0.35 + rand() * 0.35);
-        const r = 20 + rand() * 40;
-        const gr = ctx.createRadialGradient(x, y, 0, x, y, r);
-        gr.addColorStop(0, "rgba(40,40,60,0.55)");
-        gr.addColorStop(1, "rgba(40,40,60,0)");
-        ctx.fillStyle = gr;
-        ctx.fillRect(0, 0, w, h);
-      }
-    });
-    this.clouds = [];
-    for (let i = 0; i < 16; i += 1) {
-      const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: cloudTex, transparent: true, depthWrite: false, fog: false, opacity: 0.8 }));
+    this.stars = new THREE.Points(g, new THREE.PointsMaterial({ color: 0xc8d0f0, size: 1.2, sizeAttenuation: false, fog: false, transparent: true }));
+    this.scene.add(this.stars);
+    // The mist far below.
+    this.mist = new THREE.Mesh(
+      new THREE.CircleGeometry(500, 48),
+      new THREE.ShaderMaterial({
+        transparent: true,
+        depthWrite: false,
+        fog: false,
+        uniforms: { uColor: { value: new THREE.Color() }, uTime: { value: 0 } },
+        vertexShader: `varying vec2 vP; void main(){ vP = position.xy; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+        fragmentShader: `varying vec2 vP; uniform vec3 uColor; uniform float uTime;
+          float n(vec2 p){ return sin(p.x*0.05+uTime*0.1)*sin(p.y*0.06-uTime*0.07)*0.5+0.5; }
+          void main(){ float d = length(vP); float a = 0.9 * (0.75 + 0.25*n(vP)) * smoothstep(500.0, 120.0, d); gl_FragColor = vec4(uColor*(0.8+0.4*n(vP*1.7)), a); }`,
+      }),
+    );
+    this.mist.rotation.x = -Math.PI / 2;
+    this.scene.add(this.mist);
+  }
+
+  // Far islands and, out in the dark, other flames.
+  background() {
+    const rock = std({ color: 0x15141a, roughness: 1 });
+    this.far = new THREE.Group();
+    for (let i = 0; i < 46; i += 1) {
       const a = rand() * Math.PI * 2;
-      s.position.set(Math.cos(a) * 220, 70 + rand() * 60, Math.sin(a) * 220);
-      s.scale.set(180, 70, 1);
-      scene.add(s);
-      this.clouds.push({ s, a, speed: 0.004 + rand() * 0.004 });
-    }
-  }
-
-  ground() {
-    const lane = canvasTex(256, 256, (ctx, w, h) => {
-      ctx.fillStyle = "#3a3632";
-      ctx.fillRect(0, 0, w, h);
-      for (let y = 0; y < h; y += 16) for (let x = (y / 16) % 2 ? 0 : 16; x < w; x += 32) {
-        ctx.fillStyle = `rgb(${50 + rand() * 20},${46 + rand() * 18},${42 + rand() * 16})`;
-        ctx.fillRect(x + 1, y + 1, 30, 14);
-      }
-      // Puddles.
-      for (let i = 0; i < 6; i += 1) {
-        ctx.fillStyle = "rgba(20,26,40,0.6)";
-        ctx.beginPath();
-        ctx.ellipse(rand() * w, rand() * h, 10 + rand() * 30, 6 + rand() * 14, rand() * 3, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }, { repeat: true });
-    lane.repeat.set(30, 30);
-    const g = new THREE.Mesh(new THREE.PlaneGeometry(120, 120), mat(0xffffff, { map: lane, r: 0.6 }));
-    g.rotation.x = -Math.PI / 2;
-    g.position.set(4, 0, 30);
-    g.receiveShadow = true;
-    this.group.add(g);
-  }
-
-  building(b) {
-    const w = b.x2 - b.x1;
-    const d = b.z2 - b.z1;
-    const cx = (b.x1 + b.x2) / 2;
-    const cz = (b.z1 + b.z2) / 2;
-    if (b.wall) {
-      box(this.group, mat(b.color), cx, b.h / 2, cz, w, b.h, d);
-      return;
-    }
-    const floors = Math.max(1, Math.round(b.h / 3));
-    const texX = wallTextures(b.color, floors, Math.max(1, Math.round(w / 3)));
-    const texZ = wallTextures(b.color, floors, Math.max(1, Math.round(d / 3)));
-    const roofM = mat(0x8a8478, { r: 1 });
-    const wallM = (t) => {
-      const mm = mat(0xffffff, { map: t.map });
-      mm.emissiveMap = t.glow;
-      mm.emissive = new THREE.Color(0xffffff);
-      mm.emissiveIntensity = 0;
-      return mm;
-    };
-    const sideZ = wallM(texZ);
-    const sideX = wallM(texX);
-    const mats = [sideZ, sideZ, roofM, roofM, sideX, sideX];
-    // How awake this house is: its windows warm up as lamps are lit near it.
-    this.houses.push({ b, mats: [sideZ, sideX], warmth: 0, target: 0 });
-    const m = new THREE.Mesh(new THREE.BoxGeometry(w, b.h, d), mats);
-    m.position.set(cx, b.h / 2, cz);
-    m.castShadow = true;
-    m.receiveShadow = true;
-    this.group.add(m);
-    // Parapet round the roof.
-    const pm = mat(new THREE.Color(b.color).multiplyScalar(0.9).getHex());
-    const ph = 0.45;
-    box(this.group, pm, cx, b.h + ph / 2, b.z1 + 0.08, w, ph, 0.16);
-    box(this.group, pm, cx, b.h + ph / 2, b.z2 - 0.08, w, ph, 0.16);
-    box(this.group, pm, b.x1 + 0.08, b.h + ph / 2, cz, 0.16, ph, d);
-    box(this.group, pm, b.x2 - 0.08, b.h + ph / 2, cz, 0.16, ph, d);
-    // Roof clutter: a black water tank, an antenna, sometimes a clothesline.
-    if (w > 5 && d > 5) {
-      const tank = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 1.2, 20), mat(0x15171a, { r: 0.5 }));
-      tank.position.set(b.x2 - 1.2, b.h + 1.1, b.z2 - 1.3);
-      tank.castShadow = true;
-      this.group.add(tank);
-      box(this.group, mat(0x6a6660), tank.position.x, b.h + 0.25, tank.position.z, 1.2, 0.5, 1.2);
-      const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 2.2, 6), mat(0x55585e, { m: 0.6 }));
-      ant.position.set(b.x1 + 0.8, b.h + 1.1, cz);
-      this.group.add(ant);
-      for (let i = 0; i < 4; i += 1) {
-        const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.7 - i * 0.12, 4), ant.material);
-        bar.rotation.z = Math.PI / 2;
-        bar.position.set(ant.position.x, b.h + 1.5 + i * 0.22, cz);
-        this.group.add(bar);
-      }
-      if (rand() < 0.7) this.clothesline(b.x1 + 1, b.x2 - 2, b.z1 + 1.6 + rand() * (d - 3), b.h);
-    }
-  }
-
-  clothesline(x1, x2, z, h) {
-    const y = h + 1.6;
-    const wire = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, x2 - x1, 4), mat(0x333333));
-    wire.rotation.z = Math.PI / 2;
-    wire.position.set((x1 + x2) / 2, y, z);
-    this.group.add(wire);
-    for (const x of [x1, x2]) box(this.group, mat(0x4a4a4a), x, h + 0.8, z, 0.06, 1.6, 0.06);
-    const cols = [0xc2185b, 0xf9a825, 0x00838f, 0x6a1b9a, 0xe65100, 0x2e7d32];
-    for (let x = x1 + 0.4; x < x2 - 0.6; x += 0.9 + rand() * 0.6) {
-      const len = 0.6 + rand() * 0.9;
-      const cloth = new THREE.Mesh(new THREE.PlaneGeometry(0.7, len, 2, 4), mat(cols[Math.floor(rand() * cols.length)], { side: THREE.DoubleSide }));
-      cloth.position.set(x, y - len / 2, z);
-      cloth.castShadow = true;
-      this.group.add(cloth);
-    }
-  }
-
-  courtyard() {
-    // Munni's doorstep and door.
-    box(this.group, mat(0x9a8f80), 0.6, 0.17, -2.9, 3.2, 0.34, 1.0);
-    box(this.group, mat(0x5a3a22, { r: 0.6 }), 0, 1.25, -3.38, 1.4, 2.5, 0.06);
-    // Rangoli on the courtyard floor.
-    const r = new THREE.Mesh(new THREE.CircleGeometry(1.6, 48), new THREE.MeshStandardMaterial({ map: rangoliTexture(), transparent: true, roughness: 0.9 }));
-    r.rotation.x = -Math.PI / 2;
-    r.position.set(3.4, 0.012, 0.6);
-    r.receiveShadow = true;
-    this.group.add(r);
-    // A stool, a low wall, a tulsi pot.
-    box(this.group, mat(0x6a4a2a), 6.3, 0.27, 2.1, 0.5, 0.54, 0.5);
-    box(this.group, mat(0xc9c2b0), 7.6, 0.5, 3.6, 2.0, 1.0, 0.3);
-    const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.2, 0.8, 12), mat(0xa0522d));
-    pot.position.set(8.4, 0.4, 4.4);
-    this.group.add(pot);
-    for (let i = 0; i < 8; i += 1) {
-      const leaf = new THREE.Mesh(new THREE.SphereGeometry(0.1, 6, 5), mat(0x2f6a2a));
-      leaf.position.set(8.4 + (rand() - 0.5) * 0.3, 0.9 + rand() * 0.25, 4.4 + (rand() - 0.5) * 0.3);
-      this.group.add(leaf);
-    }
-    box(this.group, mat(0x8a8070), 8.9, 0.62, 5.4, 0.6, 1.24, 0.6); // a pillar for the diya
-    box(this.group, mat(0x6a4a2a), 9.6, 0.22, 6.5, 0.5, 0.44, 0.5); // crate
-  }
-
-  // Munni: nine, in a yellow frock with two plaits, sitting on her doorstep
-  // with the empty matchbox. She watches you go.
-  munni() {
-    const g = new THREE.Group();
-    const skin = mat(0x9a6a4a, { r: 0.8 });
-    const frock = mat(0xf2b928, { r: 0.85 });
-    const hair = mat(0x15100c, { r: 0.6 });
-    const add = (geo, m, x, y, z, rx = 0, ry = 0, rz = 0) => {
-      const o = new THREE.Mesh(geo, m);
-      o.position.set(x, y, z);
-      o.rotation.set(rx, ry, rz);
-      o.castShadow = true;
-      g.add(o);
-      return o;
-    };
-    // Sitting: skirt over the knees, legs down the step.
-    add(new THREE.CylinderGeometry(0.11, 0.2, 0.3, 14), frock, 0, 0.22, 0.05);
-    add(new THREE.CapsuleGeometry(0.11, 0.2, 4, 10), frock, 0, 0.45, 0);
-    for (const s of [-1, 1]) {
-      add(new THREE.CapsuleGeometry(0.035, 0.22, 3, 8), skin, s * 0.06, 0.12, 0.2, 1.2);
-      add(new THREE.CapsuleGeometry(0.033, 0.2, 3, 8), skin, s * 0.06, -0.08, 0.32);
-    }
-    // Arms on her knees, the matchbox in her hands.
-    for (const s of [-1, 1]) add(new THREE.CapsuleGeometry(0.03, 0.2, 3, 8), skin, s * 0.1, 0.42, 0.1, -0.9, 0, s * 0.2);
-    add(new THREE.BoxGeometry(0.06, 0.02, 0.04), mat(0xd8b830), 0, 0.36, 0.22);
-    const head = new THREE.Group();
-    head.position.set(0, 0.68, 0);
-    g.add(head);
-    const h = new THREE.Mesh(new THREE.SphereGeometry(0.1, 18, 14), skin);
-    h.scale.set(0.9, 1.05, 0.95);
-    h.castShadow = true;
-    head.add(h);
-    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.105, 18, 10, 0, Math.PI * 2, 0, Math.PI * 0.6), hair);
-    cap.rotation.x = -0.4;
-    cap.position.y = 0.01;
-    head.add(cap);
-    for (const s of [-1, 1]) {
-      for (let i = 0; i < 5; i += 1) {
-        const p = new THREE.Mesh(new THREE.SphereGeometry(0.022 - i * 0.002, 8, 6), hair);
-        p.position.set(s * 0.07, -0.04 - i * 0.04, -0.05);
-        head.add(p);
-      }
-      const ribbon = new THREE.Mesh(new THREE.SphereGeometry(0.02, 8, 6), mat(0xd81b60));
-      ribbon.position.set(s * 0.07, -0.24, -0.05);
-      head.add(ribbon);
-    }
-    g.position.set(-0.9, 0.34, -2.85);
-    g.rotation.y = 0.35;
-    this.group.add(g);
-    this.munniBody = g;
-    this.munniHead = head;
-  }
-
-  // She turns her head to follow your flame while you're near.
-  watch(p, t) {
-    const g = this.munniBody;
-    const d = Math.hypot(p.x - g.position.x, p.z - g.position.z);
-    let want = 0;
-    if (d < 12) {
-      want = Math.atan2(p.x - g.position.x, p.z - g.position.z) - g.rotation.y;
-      want = Math.max(-1.1, Math.min(1.1, want));
-    }
-    this.munniHead.rotation.y += (want - this.munniHead.rotation.y) * 0.05;
-    this.munniHead.rotation.x = d < 12 ? -Math.min(0.5, Math.max(0, (p.y - 0.8) * 0.3)) : 0.15 + Math.sin(t * 0.5) * 0.03;
-  }
-
-  hill() {
-    const h = HILL;
-    // A slope from the back of E up to the temple.
-    const w = h.x2 - h.x1;
-    const d = h.z2 - h.z1;
-    const geo = new THREE.BoxGeometry(w, 1, d, 1, 1, 1);
-    const hillM = mat(0x3c4a2e, { r: 1 });
-    const slope = new THREE.Mesh(geo, hillM);
-    const angle = Math.atan2(h.y1 - h.y0, 14);
-    slope.position.set((h.x1 + h.x2) / 2, (h.y0 + h.y1) / 2 - 1.2, h.z1 + d / 2);
-    slope.rotation.x = -angle;
-    slope.scale.y = 2;
-    slope.receiveShadow = true;
-    this.group.add(slope);
-    // Fill under it.
-    box(this.group, hillM, (h.x1 + h.x2) / 2, h.y0 / 2, h.z1 + d / 2, w, h.y0, d, { shadow: false });
-    // Stone steps.
-    const stone = mat(0x8a8478);
-    for (let i = 0; i < 18; i += 1) {
-      const t = i / 17;
-      box(this.group, stone, 10.3 + Math.sin(i * 0.7) * 0.4, 14 + t * 6.3, 48.4 + t * 13.4, 2.2, 0.25, 0.9);
-    }
-    // The temple: a platform, a shikhara in white, a saffron flag.
-    const white = mat(0xeee6d6);
-    box(this.group, white, 10, 20.7, 64.5, 5, 0.6, 5);
-    box(this.group, white, 10, 22.2, 66, 3, 2.6, 2.6);
-    for (let i = 0; i < 5; i += 1) {
-      const tier = new THREE.Mesh(new THREE.CylinderGeometry(1.25 - i * 0.22, 1.4 - i * 0.22, 0.7, 8), white);
-      tier.position.set(10, 23.8 + i * 0.66, 66);
-      tier.castShadow = true;
-      this.group.add(tier);
-    }
-    const kalash = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 10), mat(0xc8962e, { m: 0.8, r: 0.3 }));
-    kalash.position.set(10, 27.3, 66);
-    this.group.add(kalash);
-    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 1.8, 6), mat(0x6a5a40));
-    pole.position.set(10.3, 28.1, 66);
-    this.group.add(pole);
-    this.flag = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.5, 6, 2), mat(0xf57c00, { side: THREE.DoubleSide, emissive: 0x3a1a00 }));
-    this.flag.position.set(10.75, 28.7, 66);
-    this.group.add(this.flag);
-    // The temple bell.
-    const bell = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.26, 12, 1, true), mat(0xb8862e, { m: 0.8, r: 0.3 }));
-    bell.position.set(8.4, 22.6, 64.2);
-    this.group.add(bell);
-  }
-
-  // Strings of dead fairy lights across the lane.
-  wires() {
-    const bulbM = mat(0x3a3a44, { r: 0.3 });
-    const wireM = mat(0x222222);
-    const strings = [
-      [[6, 5.6, 12], [2.2, 8.6, 16]],
-      [[6, 7.0, 21], [2.2, 9.4, 24]],
-      [[1, 11.4, 33], [4, 13.2, 41]],
-    ];
-    for (const [a, b] of strings) {
-      const A = new THREE.Vector3(...a);
-      const B = new THREE.Vector3(...b);
-      const mid = A.clone().lerp(B, 0.5);
-      mid.y -= 0.7;
-      const curve = new THREE.QuadraticBezierCurve3(A, mid, B);
-      this.group.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 20, 0.008, 4), wireM));
-      for (let i = 1; i < 16; i += 1) {
-        const p = curve.getPoint(i / 16);
-        const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.03, 6, 5), bulbM);
-        bulb.position.copy(p);
-        bulb.position.y -= 0.04;
-        this.group.add(bulb);
+      const r = 70 + rand() * 140;
+      const s = 3 + rand() * 12;
+      const top = new THREE.Mesh(new THREE.CylinderGeometry(s, s * 0.9, s * 0.25, 7), rock);
+      const under = new THREE.Mesh(new THREE.ConeGeometry(s * 0.9, s * (1.2 + rand()), 7), rock);
+      under.rotation.x = Math.PI;
+      under.position.y = -s * 0.8;
+      const g = new THREE.Group();
+      g.add(top, under);
+      g.position.set(Math.cos(a) * r, -25 + rand() * 60, Math.sin(a) * r);
+      g.rotation.y = rand() * 6;
+      this.far.add(g);
+      if (rand() < 0.5) {
+        const f = glowSprite(2 + rand() * 3, [1.4, 0.7, 0.25]);
+        f.position.set(g.position.x, g.position.y + s * 0.2 + 0.6, g.position.z);
+        this.far.add(f);
       }
     }
+    this.scene.add(this.far);
   }
 
-  // The rest of the city, far off, where the power never went.
-  city() {
-    const m = new THREE.MeshBasicMaterial({ color: 0x0b0d16, fog: false });
-    const winM = new THREE.MeshBasicMaterial({ color: 0xffb04a, fog: false });
-    const g = new THREE.Group();
-    for (let i = 0; i < 90; i += 1) {
-      const a = (i / 90) * Math.PI * 2 + rand() * 0.05;
-      const r = 120 + rand() * 60;
-      const w = 6 + rand() * 14;
-      const h = 8 + rand() * 30;
-      const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, w), m);
-      b.position.set(Math.cos(a) * r, h / 2 - 2, Math.sin(a) * r + 30);
-      b.lookAt(0, h / 2, 30);
-      g.add(b);
-      for (let k = 0; k < 6; k += 1) {
-        if (rand() < 0.5) continue;
-        const win = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.9), winM);
-        win.position.set((rand() - 0.5) * w * 0.8, (rand() - 0.5) * h * 0.8, w / 2 + 0.05);
-        b.add(win);
-      }
-    }
-    this.scene.add(g);
-  }
-
-  lights(scene) {
-    scene.fog = new THREE.FogExp2(0x0a0d1a, 0.014);
-    this.hemi = new THREE.HemisphereLight(0x5a6ea0, 0x2a2224, 1.4);
-    scene.add(this.hemi);
-    this.moon = new THREE.DirectionalLight(0x9fb0e0, 1.1);
-    this.moon.position.set(-12, 30, 26);
-    this.moon.castShadow = true;
-    this.moon.shadow.mapSize.set(2048, 2048);
-    const c = this.moon.shadow.camera;
-    c.left = -18;
-    c.right = 18;
-    c.top = 18;
-    c.bottom = -18;
+  lights() {
+    this.hemi = new THREE.HemisphereLight(0x8090c0, 0x302020, 0.5);
+    this.scene.add(this.hemi);
+    const d = new THREE.DirectionalLight(0xb8c4ff, 0.7);
+    d.castShadow = true;
+    d.shadow.mapSize.set(2048, 2048);
+    const c = d.shadow.camera;
+    c.left = c.bottom = -18;
+    c.right = c.top = 18;
     c.near = 1;
     c.far = 90;
-    this.moon.shadow.bias = -0.0006;
-    this.moon.shadow.normalBias = 0.03;
-    scene.add(this.moon, this.moon.target);
+    d.shadow.bias = -0.0008;
+    d.shadow.normalBias = 0.02;
+    this.scene.add(d, d.target);
+    this.sun = d;
+    this.scene.fog = new THREE.FogExp2(0x000000, 0.012);
   }
 
-  // Keep the moon's shadow box around the player.
-  follow(p) {
-    this.moon.target.position.copy(p);
-    this.moon.position.set(p.x - 12, p.y + 30, p.z - 4);
-  }
-
-  // A lamp was lit here: the nearest house wakes a little.
-  warm(p) {
-    let best = null;
-    let bestD = 6;
-    for (const h of this.houses) {
-      const { b } = h;
-      const dx = Math.max(b.x1 - p.x, 0, p.x - b.x2);
-      const dz = Math.max(b.z1 - p.z, 0, p.z - b.z2);
-      const d = Math.hypot(dx, dz);
-      if (d < bestD) {
-        bestD = d;
-        best = h;
-      }
-    }
-    if (best) best.target = Math.min(1, best.target + 0.22);
-    return best;
-  }
-
-  update(dt, t) {
-    for (const h of this.houses) {
-      h.warmth += (h.target - h.warmth) * Math.min(1, dt * 0.7);
-      const flick = 1 + Math.sin(t * 3 + h.b.x1) * 0.04;
-      for (const m of h.mats) m.emissiveIntensity = h.warmth * 1.4 * flick;
-    }
-    for (const c of this.clouds) {
-      c.a += c.speed * dt;
-      c.s.position.x = Math.cos(c.a) * 220;
-      c.s.position.z = Math.sin(c.a) * 220;
-    }
-    if (this.flag) {
-      const p = this.flag.geometry.attributes.position;
-      for (let i = 0; i < p.count; i += 1) {
-        const x = p.getX(i);
-        p.setZ(i, Math.sin(t * 4 + x * 5) * 0.06 * (x + 0.45));
-      }
-      p.needsUpdate = true;
-    }
-    this.fireworks.update(dt);
-  }
-}
-
-// Fireworks over the rest of the city: a rising spark, a burst, a fade.
-export class Fireworks {
-  constructor(scene) {
-    this.scene = scene;
-    this.max = 1400;
-    this.pos = new Float32Array(this.max * 3);
-    this.vel = new Float32Array(this.max * 3);
-    this.col = new Float32Array(this.max * 3);
-    this.life = new Float32Array(this.max);
+  weatherFx() {
+    // Rain: streaks around the camera.
+    const n = 900;
     const g = new THREE.BufferGeometry();
-    g.setAttribute("position", new THREE.BufferAttribute(this.pos, 3));
-    g.setAttribute("color", new THREE.BufferAttribute(this.col, 3));
-    this.points = new THREE.Points(g, new THREE.PointsMaterial({ size: 1.6, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false, sizeAttenuation: true }));
-    this.points.frustumCulled = false;
-    scene.add(this.points);
-    this.next = 1;
-    this.cursor = 0;
-    this.rockets = [];
-    this.rate = 1; // the ending turns this up
-    this.near = false;
-    this.onBurst = () => {};
+    g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(n * 6), 3));
+    this.rain = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: 0x8aa0b8, transparent: true, opacity: 0.4, fog: false }));
+    this.rain.frustumCulled = false;
+    this.rainDrops = Array.from({ length: n }, () => [rand() * 30 - 15, rand() * 20, rand() * 30 - 15]);
+    this.scene.add(this.rain);
+    // Ash flakes, or embers: one cloud of points, coloured per level.
+    const m = 500;
+    const g2 = new THREE.BufferGeometry();
+    g2.setAttribute("position", new THREE.BufferAttribute(new Float32Array(m * 3), 3));
+    this.motes = new THREE.Points(g2, new THREE.PointsMaterial({ size: 0.08, transparent: true, opacity: 0.8, depthWrite: false, fog: false }));
+    this.motes.frustumCulled = false;
+    this.moteData = Array.from({ length: m }, () => [rand() * 40 - 20, rand() * 24 - 8, rand() * 40 - 20, rand()]);
+    this.scene.add(this.motes);
   }
 
-  launch(x, z, { near = false } = {}) {
-    const y = near ? 30 + rand() * 10 : 40 + rand() * 30;
-    this.rockets.push({ x, y: near ? 20 : 0, z, ty: y, t: 0 });
-  }
+  // ------------------------------------------------------------ a level
+  load(L, index) {
+    this.L = L;
+    this.index = index;
+    this.scene.remove(this.level);
+    this.level.traverse((o) => {
+      if (o.geometry && o.geometry !== SMALL_GEO && !o.geometry.userData.keep) o.geometry.dispose();
+    });
+    this.level = new THREE.Group();
+    this.scene.add(this.level);
+    const P = L.palette;
+    this.skyMat.uniforms.uTop.value.setHex(P.top);
+    this.skyMat.uniforms.uMid.value.setHex(P.mid);
+    this.skyMat.uniforms.uLow.value.setHex(P.low);
+    this.scene.fog.color.setHex(P.fog);
+    this.scene.fog.density = L.weather === "rain" ? 0.02 : 0.013;
+    this.mist.material.uniforms.uColor.value.setHex(P.mist);
+    this.mist.position.y = L.killY - 3;
+    this.hemi.color.setHex(P.mid).lerp(new THREE.Color(0x9098c0), 0.5);
+    this.hemi.groundColor.setHex(P.low).multiplyScalar(0.5);
+    this.hemi.intensity = P.amb * 1.6;
+    this.sun.color.setHex(P.low).lerp(new THREE.Color(0xc8d0ff), 0.6);
+    this.sun.intensity = P.amb * 1.4;
+    this.stars.material.opacity = L.weather ? 0.25 : 1;
+    this.rain.visible = L.weather === "rain";
+    this.motes.visible = L.weather === "ash" || L.weather === "embers";
+    if (L.weather === "ash") this.motes.material.color.setRGB(0.55, 0.5, 0.48);
+    if (L.weather === "embers") this.motes.material.color.setRGB(3, 1.1, 0.25);
 
-  burst(x, y, z) {
-    const palettes = [
-      [3, 1.2, 0.2],
-      [3, 0.3, 0.5],
-      [0.6, 1.8, 3],
-      [2.4, 2.4, 2.4],
-      [0.6, 3, 0.8],
-      [3, 2.2, 0.4],
-    ];
-    const c = palettes[Math.floor(rand() * palettes.length)];
-    const n = 90;
-    const speed = 9 + rand() * 6;
-    for (let i = 0; i < n; i += 1) {
-      const k = this.cursor;
-      this.cursor = (this.cursor + 1) % this.max;
-      const u = rand() * 2 - 1;
-      const a = rand() * Math.PI * 2;
-      const s = Math.sqrt(1 - u * u);
-      this.pos.set([x, y, z], k * 3);
-      this.vel.set([Math.cos(a) * s * speed, u * speed, Math.sin(a) * s * speed], k * 3);
-      this.col.set(c, k * 3);
-      this.life[k] = 1.4 + rand() * 0.8;
+    const T = TEX;
+    const stoneTop = std({ color: new THREE.Color(P.stone).multiplyScalar(1.15), map: T.stone, roughness: 0.92 });
+    const stoneSide = std({ color: new THREE.Color(P.stone).multiplyScalar(0.7), map: T.stone, roughness: 0.95 });
+    const stone = [stoneSide, stoneSide, stoneTop, stoneSide, stoneSide, stoneSide];
+    const rockMat = std({ color: new THREE.Color(P.stone).multiplyScalar(0.35), roughness: 1 });
+    const runeMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(2.2, 1.2, 0.4), fog: false });
+    const woodMat = std({ map: T.wood, roughness: 0.85 });
+    this.waterMat = std({ color: 0x5a8aa0, map: T.water, roughness: 0.15, metalness: 0.3, transparent: true, opacity: 0.88, emissive: 0x0a2030, emissiveIntensity: 0.6 });
+
+    this.platViews = new Map();
+    for (const d of L.plats) {
+      const v = { def: d, group: new THREE.Group(), wasAlive: true };
+      const g = v.group;
+      g.position.set(d.x, d.y, d.z);
+      this.level.add(g);
+      if (d.kind === "water") {
+        const m = new THREE.Mesh(boxGeo(d.w, d.h, d.d, 3), this.waterMat);
+        m.position.y = -d.h / 2;
+        g.add(m);
+      } else if (d.kind === "paper") {
+        const mat = std({ map: T.paper, roughness: 0.95, emissive: new THREE.Color(0, 0, 0), side: THREE.DoubleSide });
+        const m = new THREE.Mesh(boxGeo(d.w, d.h, d.d, 2), mat);
+        m.position.y = -d.h / 2;
+        m.castShadow = m.receiveShadow = true;
+        g.add(m);
+        // The strings it hangs from.
+        const str = new THREE.LineBasicMaterial({ color: 0x9a8a70, transparent: true, opacity: 0.4 });
+        for (const [sx, sz] of [[-1, -1], [1, 1], [1, -1], [-1, 1]]) {
+          const lg = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3((sx * d.w) / 2.2, 0, (sz * d.d) / 2.2), new THREE.Vector3((sx * d.w) / 3, 14, (sz * d.d) / 3)]);
+          g.add(new THREE.Line(lg, str));
+        }
+        v.mat = mat;
+        v.mesh = m;
+        v.flames = [0, 1, 2, 3].map((k) => {
+          const f = new SmallFlame(g, 0.35, 1.2);
+          f.object.position.set(((k % 2) - 0.5) * d.w * 0.6, 0, (Math.floor(k / 2) - 0.5) * d.d * 0.6);
+          f.visible = false;
+          return f;
+        });
+      } else if (d.kind === "wax") {
+        const mat = std({ map: T.wax, roughness: 0.55, emissive: new THREE.Color(0.25, 0.16, 0.08), emissiveIntensity: 0.6 });
+        const m = new THREE.Mesh(boxGeo(d.w, d.h, d.d, 1.3), mat);
+        m.castShadow = m.receiveShadow = true;
+        g.add(m);
+        v.mesh = m;
+        // A stone saucer under it.
+        const base = new THREE.Mesh(boxGeo(d.w + 0.4, 0.4, d.d + 0.4), stone);
+        base.position.y = -d.h - 0.2;
+        base.receiveShadow = true;
+        g.add(base);
+        const under = this.underside(d.w + 0.4, d.d + 0.4, rockMat);
+        under.position.y = -d.h - 0.4;
+        g.add(under);
+      } else if (d.blink) {
+        const mat = std({ color: 0x9ad0ff, roughness: 0.15, metalness: 0.1, emissive: new THREE.Color(0.15, 0.4, 0.8), emissiveIntensity: 0.8, transparent: true, opacity: 0.8 });
+        const m = new THREE.Mesh(boxGeo(d.w, d.h, d.d), mat);
+        m.position.y = -d.h / 2;
+        m.castShadow = true;
+        m.receiveShadow = true;
+        g.add(m);
+        const ghost = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(d.w, d.h, d.d)), new THREE.LineBasicMaterial({ color: 0x6ab0ff, transparent: true, opacity: 0.25 }));
+        ghost.position.y = -d.h / 2;
+        g.add(ghost);
+        v.mat = mat;
+        v.mesh = m;
+        v.ghost = ghost;
+      } else {
+        // Stone (or a roof).
+        const roof = !d.route;
+        const m = new THREE.Mesh(boxGeo(d.w, d.h, d.d), roof ? woodMat : stone);
+        m.position.y = -d.h / 2;
+        m.castShadow = m.receiveShadow = true;
+        g.add(m);
+        if (roof) {
+          // Posts down to the platform below.
+          const below = L.plats.find((p) => p.route && Math.abs(p.x - d.x) < 0.01 && Math.abs(p.z - d.z) < 0.01);
+          const drop = below ? d.y - d.h - below.y : 3;
+          for (const [sx, sz] of [[-1, -1], [1, 1], [1, -1], [-1, 1]]) {
+            const post = new THREE.Mesh(new THREE.BoxGeometry(0.14, drop, 0.14), woodMat);
+            post.position.set(sx * (d.w / 2 - 0.25), -d.h - drop / 2, sz * (d.d / 2 - 0.25));
+            post.castShadow = true;
+            g.add(post);
+          }
+        } else {
+          const under = this.underside(d.w, d.d, rockMat);
+          under.position.y = -d.h;
+          g.add(under);
+          if (d.move) {
+            const band = new THREE.Mesh(new THREE.BoxGeometry(d.w + 0.03, 0.06, d.d + 0.03), runeMat);
+            band.position.y = -d.h * 0.45;
+            g.add(band);
+          }
+        }
+      }
+      this.platViews.set(d.id, v);
     }
-    this.onBurst(x, y, z);
+
+    // Lamps.
+    this.pickViews = L.pickups.map((p) => {
+      const g = this.lamp(p.type);
+      this.level.add(g.group);
+      return { p, ...g };
+    });
+
+    // The checkpoint: a ring of runes and two braziers.
+    this.cpView = null;
+    if (L.cp) {
+      const pl = L.plats.find((p) => p.id === L.cp.on);
+      const g = new THREE.Group();
+      const ringMat = new THREE.MeshBasicMaterial({ map: T.rune, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false });
+      const ring = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 2.4), ringMat);
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.y = 0.01;
+      g.add(ring);
+      const off = Math.max(pl.w, pl.d) / 2 - 0.35;
+      const across = pl.w >= pl.d;
+      const braziers = [-1, 1].map((s) => {
+        const b = new THREE.Group();
+        b.position.set(across ? s * off : 0, 0, across ? 0 : s * off);
+        const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.12, 0.7, 8), stoneSide);
+        leg.position.y = 0.35;
+        const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.14, 0.18, 12, 1, true), std({ color: 0x3a2a20, metalness: 0.6, roughness: 0.5, side: THREE.DoubleSide }));
+        bowl.position.y = 0.78;
+        b.add(leg, bowl);
+        g.add(b);
+        const f = new SmallFlame(b, 0.55, 2.6);
+        f.object.position.y = 0.8;
+        f.visible = false;
+        return f;
+      });
+      this.level.add(g);
+      this.cpView = { group: g, ring, braziers };
+    }
+
+    // The goal: a ring of flames and a beam of light. Or the Eternal Fire.
+    const G = L.goal;
+    const gg = new THREE.Group();
+    gg.position.set(G.x, G.y, G.z);
+    this.level.add(gg);
+    this.goalFlames = [];
+    this.beam = null;
+    if (L.final) {
+      const big = new THREE.Mesh(flameGeometry(0.42, 40), flameMaterial({ core: [4, 2.6, 1], edge: [2.4, 0.6, 0.08], tip: [1.6, 0.3, 0.04], alpha: 0.9, wobble: 0.6 }));
+      big.scale.set(5.5, 11, 5.5);
+      big.position.y = -0.2;
+      const inner = new THREE.Mesh(flameGeometry(0.42, 32), flameMaterial({ core: [5, 4, 2.4], edge: [3, 1.4, 0.3], tip: [2, 0.7, 0.1], alpha: 0.7, wobble: 0.4 }));
+      inner.scale.set(2.8, 7, 2.8);
+      const glow = glowSprite(26, [2.4, 1.1, 0.35]);
+      glow.position.y = 4;
+      gg.add(big, inner, glow);
+      this.eternal = [big, inner];
+      this.eternalLight = new THREE.PointLight(0xff8a30, 60, 40, 1.4);
+      this.eternalLight.position.y = 3;
+      gg.add(this.eternalLight);
+    } else {
+      this.eternal = null;
+      for (let i = 0; i < 10; i += 1) {
+        const a = (i / 10) * Math.PI * 2;
+        const f = new SmallFlame(gg, 0.3, 1.0);
+        f.object.position.set(Math.cos(a) * 1.25, 0, Math.sin(a) * 1.25);
+        this.goalFlames.push(f);
+      }
+      const beam = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.3, 30, 24, 1, true), new THREE.MeshBasicMaterial({ map: T.beam, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false }));
+      beam.material.color.setRGB(0.9, 0.55, 0.25);
+      beam.position.y = 15;
+      gg.add(beam);
+      this.beam = beam;
+    }
+    this.goalGroup = gg;
+
+    // Drops.
+    const dropMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.9, 1.4, 2.2), fog: false });
+    this.dripViews = L.drips.map(() => {
+      const drop = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), dropMat);
+      drop.scale.set(1, 1.8, 1);
+      const mark = new THREE.Mesh(new THREE.CircleGeometry(0.5, 20), new THREE.MeshBasicMaterial({ color: 0x0a1830, transparent: true, opacity: 0.5, depthWrite: false }));
+      mark.rotation.x = -Math.PI / 2;
+      this.level.add(drop, mark);
+      return { drop, mark, wasFalling: false };
+    });
+
+    // Wind: streaks blowing through each zone.
+    this.windViews = L.winds.map((w) => {
+      const n = 70;
+      const g = new THREE.BufferGeometry();
+      g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(n * 6), 3));
+      const lines = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: 0xd8d0c0, transparent: true, opacity: 0.0, fog: false }));
+      lines.frustumCulled = false;
+      this.level.add(lines);
+      const pts = Array.from({ length: n }, () => [w.x0 + rand() * (w.x1 - w.x0), w.y0 + 3 + rand() * 6, w.z0 + rand() * (w.z1 - w.z0)]);
+      return { w, lines, pts };
+    });
   }
 
-  update(dt) {
-    this.next -= dt * this.rate;
-    if (this.next <= 0) {
-      this.next = 0.8 + rand() * 2.2;
-      const a = rand() * Math.PI * 2;
-      const r = 110 + rand() * 60;
-      this.launch(Math.cos(a) * r, Math.sin(a) * r + 30);
+  // The rock hanging under an island.
+  underside(w, d, mat) {
+    const s = Math.max(w, d);
+    const h = Math.min(4.5, 0.9 * s + 0.6);
+    const c = new THREE.Mesh(new THREE.ConeGeometry(s * 0.7, h, 6), mat);
+    c.rotation.x = Math.PI;
+    c.scale.set(w / s, 1, d / s);
+    c.position.y = -h / 2;
+    const g = new THREE.Group();
+    g.add(c);
+    return g;
+  }
+
+  // A lamp to burn: a clay diya, a candle, or a lantern.
+  lamp(type) {
+    const g = new THREE.Group();
+    let fy = 0.2;
+    let size = 0.22;
+    if (type === "diya") {
+      const pts = [
+        [0, 0],
+        [0.12, 0],
+        [0.2, 0.06],
+        [0.22, 0.12],
+        [0.18, 0.115],
+        [0, 0.085],
+      ].map(([x, y]) => new THREE.Vector2(x, y));
+      const m = new THREE.Mesh(new THREE.LatheGeometry(pts, 20), std({ color: 0xb5592a, roughness: 0.85 }));
+      m.castShadow = true;
+      g.add(m);
+      fy = 0.14;
+    } else if (type === "candle") {
+      const c = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.09, 0.42, 14), std({ color: 0xf2ead8, roughness: 0.5, emissive: 0x302010 }));
+      c.position.y = 0.21;
+      c.castShadow = true;
+      const plate = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.2, 0.04, 16), std({ color: 0xc8962e, metalness: 0.8, roughness: 0.3 }));
+      plate.position.y = 0.02;
+      g.add(c, plate);
+      fy = 0.44;
+      size = 0.26;
+    } else {
+      const brass = std({ color: 0xc8962e, metalness: 0.8, roughness: 0.3 });
+      const base = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.2, 0.08, 8), brass);
+      base.position.y = 0.04;
+      const glass = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.36, 8, 1, true), std({ color: 0xffe0a0, transparent: true, opacity: 0.3, roughness: 0.1, side: THREE.DoubleSide }));
+      glass.position.y = 0.26;
+      const cap = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.16, 8), brass);
+      cap.position.y = 0.52;
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.07, 0.015, 6, 12), brass);
+      ring.position.y = 0.64;
+      g.add(base, glass, cap, ring);
+      for (let i = 0; i < 4; i += 1) {
+        const bar = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.36, 0.02), brass);
+        const a = (i / 4) * Math.PI * 2 + Math.PI / 8;
+        bar.position.set(Math.cos(a) * 0.15, 0.26, Math.sin(a) * 0.15);
+        g.add(bar);
+      }
+      fy = 0.16;
+      size = 0.24;
     }
-    for (const r of this.rockets) {
-      r.t += dt;
-      r.y += 40 * dt;
-      if (r.y >= r.ty && !r.done) {
-        r.done = true;
-        this.burst(r.x, r.y, r.z);
+    const flame = new SmallFlame(g, size, type === "lantern" ? 1.6 : 1.1);
+    flame.object.position.y = fy;
+    // A soft halo so you can find it in the dark.
+    const halo = glowSprite(type === "lantern" ? 2.6 : 1.8, [0.9, 0.5, 0.2]);
+    halo.position.y = fy + 0.1;
+    g.add(halo);
+    return { group: g, flame, halo, fy };
+  }
+
+  // ------------------------------------------------------------ per frame
+  sync(run, t, dt, focus) {
+    const st = run.st;
+    for (const p of st.plats) {
+      const v = this.platViews.get(p.def.id);
+      const d = p.def;
+      v.group.position.set(p.x, p.y, p.z);
+      if (d.kind === "paper") {
+        v.mesh.visible = p.alive;
+        const k = p.burning ? Math.min(1, p.burnT / 0.55) : Math.min(1, p.touch / 0.45) * 0.3;
+        v.mat.color.setRGB(1 - k * 0.8, 1 - k * 0.85, 1 - k * 0.9);
+        v.mat.emissive.setRGB(k * 2.2, k * 0.7, k * 0.1);
+        for (const f of v.flames) {
+          f.visible = p.alive && p.burning;
+          if (p.alive && p.burning) f.update(t, 0.5 + k);
+        }
+        if (v.wasAlive && !p.alive) for (let i = 0; i < 40; i += 1) this.ash.emit(p.x + (rand() - 0.5) * d.w, p.y, p.z + (rand() - 0.5) * d.d, (rand() - 0.5) * 2, rand() * 2, (rand() - 0.5) * 2);
+        if (!v.wasAlive && p.alive) v.grow = 0;
+        if (v.grow !== undefined && v.grow < 1) v.grow = Math.min(1, v.grow + dt * 3);
+        const s = (v.grow ?? 1) * (p.burning ? 1 - k * 0.4 : 1);
+        v.mesh.scale.set(Math.max(0.01, s), 1, Math.max(0.01, s));
+        v.wasAlive = p.alive;
+      } else if (d.kind === "wax") {
+        const left = Math.max(0.02, d.h - p.melt);
+        v.mesh.visible = p.alive;
+        v.mesh.scale.y = left / d.h;
+        v.mesh.position.y = -p.melt - left / 2;
+        v.mesh.material.emissiveIntensity = p.melt > 0 ? 1.2 : 0.6;
+      } else if (d.blink) {
+        v.mesh.visible = p.alive && !(p.fading && Math.sin(t * 40) > 0);
+        v.mat.opacity = p.fading ? 0.4 : 0.8;
+        v.ghost.material.opacity = p.alive ? 0.15 : 0.35 + Math.sin(t * 6) * 0.1;
       }
     }
-    this.rockets = this.rockets.filter((r) => !r.done);
-    for (let i = 0; i < this.max; i += 1) {
-      if (this.life[i] <= 0) continue;
-      this.life[i] -= dt;
-      const k = i * 3;
-      this.vel[k + 1] -= 6 * dt;
-      for (let j = 0; j < 3; j += 1) {
-        this.vel[k + j] *= 1 - dt * 1.2;
-        this.pos[k + j] += this.vel[k + j] * dt;
+    if (this.waterMat) this.waterMat.map.offset.set(t * 0.02, t * 0.013);
+
+    // Lamps.
+    for (const v of this.pickViews) {
+      const pos = pickupPos(st, v.p);
+      v.group.position.set(pos.x, pos.y - 0.35, pos.z);
+      v.flame.visible = !v.p.taken;
+      v.halo.visible = !v.p.taken;
+      if (!v.p.taken) {
+        v.flame.update(t);
+        v.halo.material.opacity = 0.6 + Math.sin(t * 3 + pos.x) * 0.2;
       }
-      const f = Math.max(0, Math.min(1, this.life[i] / 1.2));
-      if (this.life[i] <= 0) this.pos[k + 1] = -999;
-      this.col[k] *= 0.985 + 0.015 * f;
-      this.col[k + 1] *= 0.98 + 0.02 * f;
-      this.col[k + 2] *= 0.98 + 0.02 * f;
     }
-    this.points.geometry.attributes.position.needsUpdate = true;
-    this.points.geometry.attributes.color.needsUpdate = true;
+
+    // Checkpoint.
+    if (this.cpView) {
+      const c = this.cpView;
+      const pl = st.byId.get(this.L.cp.on);
+      c.group.position.set(pl.x + (this.L.cp.x - pl.def.x), pl.y, pl.z + (this.L.cp.z - pl.def.z));
+      const lit = st.cpReached;
+      for (const f of c.braziers) {
+        f.visible = lit;
+        if (lit) f.update(t, 1);
+      }
+      const k = lit ? 1 : 0.3 + Math.sin(t * 2) * 0.15;
+      c.ring.material.color.setRGB(1.6 * k, 0.9 * k, 0.4 * k);
+      c.ring.rotation.z = t * 0.2;
+    }
+
+    // Goal.
+    for (const f of this.goalFlames) f.update(t, 1);
+    if (this.beam) this.beam.material.opacity = 0.35 + Math.sin(t * 1.5) * 0.08;
+    if (this.eternal) {
+      for (const m of this.eternal) m.material.uniforms.uTime.value = t * 0.6;
+      this.eternalLight.intensity = 55 + Math.sin(t * 7) * 6 + Math.random() * 6;
+    }
+
+    // Drops: the drop, and a shadow on the floor that darkens as it comes.
+    st.drips.forEach((d, i) => {
+      const v = this.dripViews[i];
+      v.drop.visible = !!d.falling;
+      v.drop.position.set(d.x, d.y, d.z);
+      const near = d.falling ? Math.max(0, 1 - (d.y - d.floor) / (d.top - d.floor)) : 0;
+      v.mark.position.set(d.x, d.floor + 0.02, d.z);
+      v.mark.material.opacity = 0.15 + near * 0.6;
+      v.mark.scale.setScalar(0.5 + near * 0.6);
+      if (v.wasFalling && !d.falling) for (let k = 0; k < 14; k += 1) this.splash.emit(d.x, d.floor + 0.05, d.z, (rand() - 0.5) * 3, rand() * 2.5, (rand() - 0.5) * 3);
+      v.wasFalling = d.falling;
+    });
+
+    // Wind.
+    for (const v of this.windViews) {
+      const w = v.w;
+      const speed = w.active ? 16 : 1.2;
+      v.lines.material.opacity += ((w.active ? 0.5 : w.warn ? 0.2 : 0.05) - v.lines.material.opacity) * Math.min(1, dt * 6);
+      const a = v.lines.geometry.attributes.position;
+      v.pts.forEach((p, k) => {
+        p[0] += w.dx * speed * dt;
+        p[2] += w.dz * speed * dt;
+        if (p[0] < w.x0) p[0] = w.x1;
+        if (p[0] > w.x1) p[0] = w.x0;
+        if (p[2] < w.z0) p[2] = w.z1;
+        if (p[2] > w.z1) p[2] = w.z0;
+        const len = w.active ? 0.9 : 0.2;
+        const y = p[1] + Math.sin(t * 2 + k) * 0.2;
+        a.setXYZ(k * 2, p[0], y, p[2]);
+        a.setXYZ(k * 2 + 1, p[0] - w.dx * len, y, p[2] - w.dz * len);
+      });
+      a.needsUpdate = true;
+    }
+
+    this.splash.update(dt);
+    this.ash.update(dt);
+    this.assignLights(run, focus);
+  }
+
+  // Four real lights go to the nearest lit lamps and braziers.
+  assignLights(run, focus) {
+    const cands = [];
+    for (const v of this.pickViews) if (!v.p.taken) cands.push({ p: v.group.position, y: v.fy + 0.2, i: 1.4 });
+    if (this.cpView && run.st.cpReached) cands.push({ p: this.cpView.group.position, y: 1.2, i: 4 });
+    if (!this.eternal) cands.push({ p: this.goalGroup.position, y: 0.6, i: 5 });
+    for (const c of cands) c.d = c.p.distanceToSquared(focus);
+    cands.sort((a, b) => a.d - b.d);
+    this.poolLights.forEach((l, k) => {
+      const c = cands[k];
+      if (!c) {
+        l.intensity = 0;
+        return;
+      }
+      l.position.set(c.p.x, c.p.y + c.y, c.p.z);
+      l.intensity = c.i * (0.9 + Math.random() * 0.15);
+    });
+  }
+
+  update(dt, t, cam, focus) {
+    this.mist.material.uniforms.uTime.value = t;
+    this.skyDome.position.copy(cam);
+    this.stars.position.copy(cam);
+    this.far.rotation.y = t * 0.004;
+    // The sun's shadow box follows you.
+    this.sun.position.set(focus.x - 20, focus.y + 30, focus.z - 10);
+    this.sun.target.position.copy(focus);
+    if (this.rain.visible) {
+      const a = this.rain.geometry.attributes.position;
+      this.rainDrops.forEach((d, k) => {
+        d[1] -= dt * 24;
+        if (d[1] < -6) {
+          d[1] = 14;
+          d[0] = rand() * 30 - 15;
+          d[2] = rand() * 30 - 15;
+        }
+        const x = cam.x + d[0];
+        const y = cam.y + d[1] - 4;
+        const z = cam.z + d[2];
+        a.setXYZ(k * 2, x, y, z);
+        a.setXYZ(k * 2 + 1, x + 0.05, y + 0.6, z);
+      });
+      a.needsUpdate = true;
+    }
+    if (this.motes.visible) {
+      const up = this.L.weather === "embers";
+      const a = this.motes.geometry.attributes.position;
+      this.moteData.forEach((d, k) => {
+        d[1] += dt * (up ? 1.2 + d[3] : -0.8 - d[3] * 0.6);
+        d[0] += Math.sin(t * 0.7 + d[3] * 9) * dt * 0.6;
+        if (d[1] > 16) d[1] = -8;
+        if (d[1] < -8) d[1] = 16;
+        a.setXYZ(k, focus.x + d[0], focus.y + d[1], focus.z + d[2]);
+      });
+      a.needsUpdate = true;
+    }
   }
 }

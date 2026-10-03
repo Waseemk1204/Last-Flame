@@ -1,11 +1,10 @@
 # LAST FLAME
 
-> *You can't stay. You can only pass the light on.*
+> *Everything burns out. Carry the fire anyway.*
 
-Diwali night. A storm has blown out every lamp in the galli. You are the
-flame from the last match, and every body you burn in dies. Leap from match
-to diya to sparkler to rocket, climb the neighbourhood, and light the temple
-lamp before you go out. Every diya you light stays lit behind you.
+You are a little flame with only seconds to live. Run, jump and dash across
+nine floating levels, burning every lamp you pass for a few more seconds,
+to carry the fire home to the Eternal Fire.
 
 Made for BYOG 2026 · theme **Everything is Temporary**.
 
@@ -13,8 +12,20 @@ Made for BYOG 2026 · theme **Everything is Temporary**.
 npm start
 ```
 
-Then open http://localhost:5177. Mouse to look, click or Space to leap, Esc to pause.
+Then open http://localhost:5177.
+
+| Key | |
+|---|---|
+| WASD / arrows | move |
+| Mouse | look |
+| Space | jump (again in the air: double jump, costs 1 s) |
+| Shift | dash (costs 1 s) |
+| R | back to your checkpoint |
+| Esc | pause |
 
 - Design: [docs/DESIGN.md](docs/DESIGN.md)
-- `npm test` proves the climb can be finished: every host reachable, every checkpoint leads on, no dead ends.
-- `?dev` skips the title; `?dev&auto` runs an autopilot that plays the whole level.
+- `npm test`: a bot plays all nine levels with the game's own physics and
+  proves each can be finished in time, through its checkpoint, with slack.
+- `?level=N` jumps to a level; `?level=N&auto` lets the bot play it
+  (`&all` carries on to the next).
+- `npm run package` zips the web build for itch.io.

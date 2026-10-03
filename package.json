@@ -1,10 +1,12 @@
 {
   "name": "last-flame",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
-  "description": "Last Flame: you are a flame on Diwali night. Every body you burn in dies. Leap, climb the neighbourhood, and light the temple lamp.",
-  "engines": { "node": ">=20" },
+  "description": "Last Flame: a little flame with seconds to live. Nine levels of running, jumping and dashing; burn lamps for more time; carry the fire to the Eternal Fire.",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "start": "node server.mjs",
     "test": "node --test test/*.test.mjs",
