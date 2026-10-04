@@ -1,0 +1,63 @@
+LAST FLAME
+Everything burns out. Carry the fire anyway.
+Made for BYOG 2026 (theme: Everything is Temporary).
+
+
+HOW TO PLAY (no install needed)
+-------------------------------
+1. Unzip this file.
+     Windows: right-click the zip > Extract All > Extract.
+     Mac: double-click the zip.
+2. Open the folder and double-click LastFlame.html.
+   It opens in your web browser and the game starts at the title screen.
+3. Click PLAY. Click once inside the game to capture the mouse.
+
+If LastFlame.html opens in something other than a browser (a text editor,
+for example): right-click it > Open with > Google Chrome (or Microsoft Edge
+or Firefox).
+
+Best in Google Chrome or Microsoft Edge on a laptop or desktop with a
+keyboard and mouse. A gamepad works too. Turn your sound on.
+
+
+CONTROLS
+--------
+  Move ........................ W A S D  or arrow keys
+  Look ........................ mouse
+  Jump ........................ Space  (press again in the air: double jump)
+  Dash ........................ Shift
+  Back to checkpoint .......... R
+  Pause ....................... Esc
+  Full screen ................. F
+
+  Gamepad: left stick move, right stick look, A jump, B/X/RB dash,
+  Y back to checkpoint, Start pause.
+
+
+HOW IT WORKS
+------------
+The number at the top is how many seconds of flame you have left.
+Run through lamps to get more time: a diya gives 3 seconds, a candle 5,
+a lantern 8. A double jump or a dash costs 1 second.
+Step on the glowing rune circle to set your checkpoint. Lives are
+unlimited, so when you go out you start again from there.
+
+
+IF SOMETHING GOES WRONG
+-----------------------
+- Black screen or very slow: Esc > Settings > Graphics > Low.
+  Also make sure your browser's hardware acceleration is on.
+- The mouse doesn't turn the camera: click inside the game window once.
+- No sound: click anywhere in the game once (browsers keep sound off until
+  you do), and check the volume in Settings.
+- Your progress is saved in the browser you play in. It stays as long as
+  you open the game from the same place in the same browser.
+
+
+CREDITS
+-------
+Built with three.js (MIT licence). Fonts: Cormorant Garamond and Inter
+(SIL Open Font Licence), via Google Fonts. Every model, texture and sound
+is made in code for this game. Made with the help of an AI coding
+assistant (Claude).
+Source: https://github.com/Waseemk1204/Last-Flame

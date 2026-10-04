@@ -31,6 +31,7 @@ Then open http://localhost:5177.
 - `npm run package` builds the game into a single self-contained HTML file
   (`tools/build.mjs`) and writes to `dist/`:
   - `LastFlame.html`: download and double-click to play, no server needed.
-  - `last-flame-download.zip`: the same file, zipped.
+  - `last-flame-download.zip`: a `Last Flame` folder with that file and
+    `PLAY ME.txt` (setup instructions for players, from `tools/PLAY-ME.txt`).
   - `last-flame-web.zip`: the same file as `index.html`, for itch.io's
     "playable in the browser" upload.
