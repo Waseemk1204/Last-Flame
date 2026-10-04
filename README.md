@@ -28,4 +28,9 @@ Then open http://localhost:5177.
   proves each can be finished in time, through its checkpoint, with slack.
 - `?level=N` jumps to a level; `?level=N&auto` lets the bot play it
   (`&all` carries on to the next).
-- `npm run package` zips the web build for itch.io.
+- `npm run package` builds the game into a single self-contained HTML file
+  (`tools/build.mjs`) and writes to `dist/`:
+  - `LastFlame.html`: download and double-click to play, no server needed.
+  - `last-flame-download.zip`: the same file, zipped.
+  - `last-flame-web.zip`: the same file as `index.html`, for itch.io's
+    "playable in the browser" upload.

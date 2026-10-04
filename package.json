@@ -10,7 +10,8 @@
   "scripts": {
     "start": "node server.mjs",
     "test": "node --test test/*.test.mjs",
-    "check": "for f in server.mjs shared/*.js src/*.js test/*.mjs; do node --check \"$f\" || exit 1; done",
-    "package": "rm -rf dist && mkdir -p dist && zip -rq dist/last-flame-web.zip index.html src shared assets -x '*.DS_Store' && echo dist/last-flame-web.zip"
+    "check": "for f in server.mjs shared/*.js src/*.js test/*.mjs tools/*.mjs; do node --check \"$f\" || exit 1; done",
+    "package": "rm -rf dist && node tools/build.mjs && cd dist && zip -q last-flame-web.zip index.html && zip -q last-flame-download.zip LastFlame.html && rm index.html && ls",
+    "build": "node tools/build.mjs"
   }
 }

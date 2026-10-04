@@ -187,6 +187,7 @@ export class Game {
     this.index = index;
     this.L = L;
     this.world.load(L, index);
+    for (const p of this.world.prompts) p.sp.visible = false; // no key prompts behind the menu
     this.run = new Run(L);
     this.bot = null;
     this.recording = null;
