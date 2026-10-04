@@ -131,6 +131,7 @@ window.addEventListener("keydown", (e) => {
     if (e.code === "Space") input.jump = true;
     if (e.code === "ShiftLeft" || e.code === "ShiftRight") input.dash = true;
     if (e.code === "KeyR" && running) game.restartCheckpoint();
+    if (e.code === "KeyF") toggleFullscreen();
     if (e.code === "Enter" && !$("#win").classList.contains("hidden")) next();
   }
   keys.add(e.code);
@@ -170,6 +171,21 @@ function pollPad(dt) {
   if (edge(0) && !$("#win").classList.contains("hidden")) next();
   pad.prev = gp.buttons.map((b) => b.pressed);
 }
+
+// Full screen: the button (on every menu) or F. Pointer lock survives it.
+function toggleFullscreen() {
+  const wasRunning = running;
+  if (document.fullscreenElement) document.exitFullscreen?.();
+  else
+    Promise.resolve($("#app").requestFullscreen?.({ navigationUI: "hide" }))
+      .then(() => wasRunning && lock())
+      .catch(() => {});
+}
+$("#btn-fs").addEventListener("click", (e) => {
+  e.currentTarget.blur();
+  toggleFullscreen();
+});
+if (!document.fullscreenEnabled) $("#btn-fs").classList.add("hidden");
 
 // ------------------------------------------------------------------ setup
 const canvas = $("#game");
@@ -439,6 +455,7 @@ function frame(now) {
   last = now;
   if (!$("#title").classList.contains("hidden")) drawTitleFlame(now);
   pollPad(dt);
+  document.body.classList.toggle("playing", running);
   if (running || game.state === "won" || game.state === "ending" || game.state === "showcase") {
     try {
       game.update(dt);

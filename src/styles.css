@@ -112,6 +112,12 @@ kbd { font: 600 10px var(--sans); border: 1px solid rgba(243, 231, 208, 0.4); bo
 .final-table td { padding: 4px 6px; border-bottom: 1px solid rgba(243, 231, 208, 0.08); text-align: left; color: var(--dim); }
 .final-table td:first-child { color: var(--ink); font-family: var(--serif); font-size: 17px; }
 .final-table td.r { text-align: right; font-variant-numeric: tabular-nums; }
+.fs { position: absolute; right: 16px; bottom: 16px; z-index: 20; width: 40px; height: 40px; padding: 8px; background: rgba(5, 6, 12, 0.45); border: 1px solid rgba(243, 231, 208, 0.25); border-radius: 6px; cursor: pointer; transition: border-color 0.2s, background 0.2s; }
+.fs:hover, .fs:focus-visible { border-color: var(--ember); background: rgba(255, 170, 74, 0.12); outline: none; }
+.fs svg { width: 100%; height: 100%; fill: none; stroke: var(--ink); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.fs .fs-out, :fullscreen .fs .fs-in { display: none; }
+:fullscreen .fs .fs-out { display: inline; }
+body.playing .fs { opacity: 0; pointer-events: none; }
 .fade { position: absolute; inset: 0; background: #000; pointer-events: none; opacity: 0; transition: opacity 0.5s; }
 .fade.on { opacity: 1; }
 @media (max-width: 760px) {
