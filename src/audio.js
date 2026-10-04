@@ -47,8 +47,17 @@ export class Sound extends AudioEngine {
     for (const d of [-5, 4]) this.tone({ freq, type: "triangle", duration: dur, gain, attack: 2.2, detune: d, out: this.padOut });
   }
 
-  update(dt, { life01 = 1, playing = true, wind = 0, rain = 0, fire = 0, low = false, quake = 0 } = {}) {
+  update(dt, { life01 = 1, playing = true, wind = 0, rain = 0, fire = 0, low = false, quake = 0, silent = false } = {}) {
     if (!this.started) return;
+    // The title screen is silent: no music, no ambience, no loops.
+    this.fade(this.padOut.gain, silent ? 0 : 0.5, 0.4);
+    this.fade(this.duck.gain, silent ? 0 : 1, 0.4);
+    if (silent) {
+      for (const l of [this.air, this.crackle, this.roar, this.rainLoop, this.windLoop, this.quakeLoop]) this.fade(l.gain.gain, 0, 0.3);
+      this.next.pad = 0;
+      return;
+    }
+    this.fade(this.air.gain.gain, 0.1, 0.6);
     this.time += dt;
     const t = this.time;
     const due = (k, a, b) => {

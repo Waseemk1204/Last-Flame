@@ -296,7 +296,7 @@ export class Game {
       this.ui.run(run.time, this.L.par, n, ps.length);
     }
     const near = this.L.final ? Math.max(0, 1 - Math.hypot(b.x - this.L.goal.x, b.z - this.L.goal.z, b.y - this.L.goal.y) / 25) : 0;
-    this.sound.update(dt, { life01, playing: this.state === "play", wind: run.inWind ? 1 : 0, rain: this.L.rain ? (run.inRain ? 1 : 0.4) : 0, fire: this.state === "ending" ? 1 : near, low, quake: this.state === "play" && run.st.collapseT !== null ? 1 : 0 });
+    this.sound.update(dt, { life01, playing: this.state === "play", wind: run.inWind ? 1 : 0, rain: this.L.rain ? (run.inRain ? 1 : 0.4) : 0, fire: this.state === "ending" ? 1 : near, low, quake: this.state === "play" && run.st.collapseT !== null ? 1 : 0, silent: this.state === "showcase" });
     this.sound.listen?.(this.camera.position.x, this.camera.position.y, this.camera.position.z, Math.sin(this.yaw), Math.cos(this.yaw));
     this.post.fx.vignette = 0.45 + (low ? 0.25 + Math.sin(t * 8) * 0.08 : 0);
     this.post.fx.desat = low ? 0.25 : 0;
