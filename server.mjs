@@ -30,15 +30,15 @@ const TYPES = {
 
 createServer(async (req, res) => {
   // Dev only (this server isn't deployed): save a frame from the game to
-  // dist/shots/<name>.png, for the itch.io page.
+  // jam/<name>.png, for the jam page.
   if (req.method === "POST" && req.url.startsWith("/__capture")) {
     const name = (new URL(req.url, "http://x").searchParams.get("name") || "shot").replace(/[^a-z0-9-_]/gi, "");
     const chunks = [];
     for await (const c of req) chunks.push(c);
     const data = Buffer.concat(chunks).toString().replace(/^data:image\/\w+;base64,/, "");
     const { mkdir, writeFile } = await import("node:fs/promises");
-    await mkdir(join(root, "dist", "shots"), { recursive: true });
-    await writeFile(join(root, "dist", "shots", `${name}.png`), Buffer.from(data, "base64"));
+    await mkdir(join(root, "jam"), { recursive: true });
+    await writeFile(join(root, "jam", `${name}.png`), Buffer.from(data, "base64"));
     res.writeHead(200).end("ok");
     return;
   }
